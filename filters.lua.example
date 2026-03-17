@@ -1,0 +1,39 @@
+-- ===== Filter Rules =====
+-- Copy this file as filters.lua and adjust it to your needs.
+-- Path: /srv/imapfilter/filters.lua (or as defined in config.php)
+
+---------------------------------
+-- 1. Spam detection & sorting
+---------------------------------
+
+-- Messages in inbox marked as spam by the provider
+spam_candidates = inbox:contain_field('X-KasSpamfilter', 'rSpamD')
+
+-- Exceptions (senders that should never be treated as spam)
+false_positive =
+      inbox:contain_from('@example.com') +
+      inbox:contain_from('@newsletter.example.com')
+
+-- Spam = all candidates minus exceptions
+real_spam = spam_candidates
+if false_positive then
+    real_spam = real_spam - false_positive
+end
+
+inbox:move_messages(spamfolder, real_spam)
+
+-------------------
+-- 2. Custom filters
+-------------------
+
+-- Example: Family
+family_msgs = inbox:contain_from('john.doe@example.com')
+inbox:move_messages(family_root, family_msgs)
+
+-- Example: Work
+work_msgs = inbox:contain_from('@company.com')
+inbox:move_messages(work, work_msgs)
+
+-- Example: Newsletter
+newsletter_msgs = inbox:contain_from('@newsletter.example.com')
+inbox:move_messages(newsletter_root, newsletter_msgs)
