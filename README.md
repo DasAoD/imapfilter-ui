@@ -151,4 +151,4 @@ nginx -t && systemctl reload nginx
 
 ## License
 
-MIT
+[MIT](LICENSE)
