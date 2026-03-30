@@ -1,0 +1,11 @@
+[Unit]
+Description=IMAPFilter Dispatcher Timer
+Requires=imapfilter-dispatcher.service
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

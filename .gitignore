@@ -1,0 +1,20 @@
+# Secrets & lokale Konfiguration
+filters.lua
+folders.lua
+rules.json
+imap_settings.json
+users.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log

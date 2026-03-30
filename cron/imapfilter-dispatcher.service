@@ -1,0 +1,12 @@
+[Unit]
+Description=IMAPFilter Dispatcher
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+ExecStartPre=/bin/mkdir -p /var/log/imapfilter
+ExecStartPre=/bin/chown www-data:www-data /var/log/imapfilter
+ExecStart=/usr/bin/php /var/www/imapfilter-ui/cron/dispatcher.php
+StandardOutput=append:/var/log/imapfilter/dispatcher.log
+StandardError=append:/var/log/imapfilter/dispatcher.log
