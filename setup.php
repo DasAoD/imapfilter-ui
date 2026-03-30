@@ -23,8 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Bitte einen Benutzernamen eingeben.';
     } elseif (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $user)) {
         $error = 'Benutzername darf nur Buchstaben, Zahlen, Bindestrich, Punkt und Unterstrich enthalten.';
-    } elseif (strlen($pass) < 8) {
-        $error = 'Passwort muss mindestens 8 Zeichen lang sein.';
+    } elseif (strlen($pass) < 10) {
+        $error = 'Passwort muss mindestens 10 Zeichen lang sein.';
+    } elseif (!preg_match('/[A-Z]/', $pass) || !preg_match('/[a-z]/', $pass) ||
+              !preg_match('/[0-9]/', $pass) || !preg_match('/[!@#$%^&*\-_=+?]/', $pass)) {
+        $error = 'Passwort muss Groß- und Kleinbuchstaben, eine Zahl und ein Sonderzeichen enthalten.';
     } elseif ($pass !== $pass2) {
         $error = 'Passwörter stimmen nicht überein.';
     } else {
@@ -75,8 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    value="<?= htmlspecialchars($_POST['user'] ?? '') ?>">
         </div>
         <div class="form-group">
-            <label class="form-label">Passwort (min. 8 Zeichen)</label>
-            <input type="password" name="pass" class="form-input" autocomplete="new-password">
+            <label class="form-label">Passwort (min. 10 Zeichen, Groß-/Kleinbuchstaben, Zahl, Sonderzeichen)</label>
+            <input type="password" name="pass" class="form-input" autocomplete="new-password"
+                   id="setup-pass" oninput="pwdCheck()">
+            <div style="margin-top:8px">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="flex:1;height:6px;background:#374151;border-radius:3px;overflow:hidden">
+                        <div id="setup-bar" style="height:100%;width:0%;border-radius:3px;transition:width .3s,background .3s"></div>
+                    </div>
+                    <span id="setup-label" style="font-size:.78rem;min-width:80px"></span>
+                </div>
+            </div>
         </div>
         <div class="form-group">
             <label class="form-label">Passwort wiederholen</label>
@@ -88,5 +100,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 </div>
 </div>
+<script>
+function pwdCheck() {
+    const val   = document.getElementById('setup-pass').value;
+    const bar   = document.getElementById('setup-bar');
+    const label = document.getElementById('setup-label');
+    let score = 0;
+    if (val.length >= 10)              score++;
+    if (val.length >= 14)              score++;
+    if (/[A-Z]/.test(val))            score++;
+    if (/[a-z]/.test(val))            score++;
+    if (/[0-9]/.test(val))            score++;
+    if (/[!@#$%^&*\-_=+?]/.test(val)) score++;
+    const levels = [
+        { pct:'0%',   bg:'transparent', text:'' },
+        { pct:'20%',  bg:'#ef4444',     text:'Sehr schwach' },
+        { pct:'35%',  bg:'#f97316',     text:'Schwach' },
+        { pct:'55%',  bg:'#eab308',     text:'Mittel' },
+        { pct:'75%',  bg:'#3b82f6',     text:'Stark' },
+        { pct:'90%',  bg:'#10b981',     text:'Sehr stark' },
+        { pct:'100%', bg:'#10b981',     text:'Ausgezeichnet' },
+    ];
+    const lvl = levels[Math.min(score, levels.length - 1)];
+    bar.style.width      = lvl.pct;
+    bar.style.background = lvl.bg;
+    label.textContent    = lvl.text;
+    label.style.color    = lvl.bg;
+}
+</script>
 </body>
 </html>

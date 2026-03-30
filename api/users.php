@@ -2,15 +2,60 @@
 require_once __DIR__ . '/auth_check.php';
 header('Content-Type: application/json');
 
-// Nur Admins dürfen diesen Endpunkt nutzen
+$method = $_SERVER['REQUEST_METHOD'];
+$action = $_GET['action'] ?? '';
+
+function validate_password(string $pwd): ?string {
+    if (strlen($pwd) < 10) return 'Passwort muss mindestens 10 Zeichen lang sein.';
+    if (!preg_match('/[A-Z]/', $pwd)) return 'Passwort muss einen Großbuchstaben enthalten.';
+    if (!preg_match('/[a-z]/', $pwd)) return 'Passwort muss einen Kleinbuchstaben enthalten.';
+    if (!preg_match('/[0-9]/', $pwd)) return 'Passwort muss eine Zahl enthalten.';
+    if (!preg_match('/[!@#$%^&*\-_=+?]/', $pwd)) return 'Passwort muss ein Sonderzeichen enthalten (!@#$%^&*-_=+?).';
+    return null;
+}
+
+// ─── POST: Eigenes Passwort ändern (alle Benutzer) ───────────────────────────
+if ($method === 'POST' && $action === 'change_password') {
+    $body        = json_decode(file_get_contents('php://input'), true) ?? [];
+    $currentPwd  = $body['current_password'] ?? '';
+    $newPwd      = $body['new_password']     ?? '';
+
+    // Aktuelles Passwort prüfen
+    $user = find_user($currentUser);
+    if (!$user || !password_verify($currentPwd, $user['password_hash'])) {
+        echo json_encode(['ok' => false, 'error' => 'Aktuelles Passwort ist falsch.']);
+        exit;
+    }
+
+    // Passwort-Anforderungen serverseitig prüfen
+    if (strlen($newPwd) < 10) {
+        echo json_encode(['ok' => false, 'error' => 'Neues Passwort muss mindestens 10 Zeichen lang sein.']);
+        exit;
+    }
+    if (!preg_match('/[A-Z]/', $newPwd) || !preg_match('/[a-z]/', $newPwd) ||
+        !preg_match('/[0-9]/', $newPwd) || !preg_match('/[!@#$%^&*\-_=+?]/', $newPwd)) {
+        echo json_encode(['ok' => false, 'error' => 'Passwort erfüllt nicht die Anforderungen (Groß-/Kleinbuchstaben, Zahl, Sonderzeichen).']);
+        exit;
+    }
+    if ($newPwd === $currentPwd) {
+        echo json_encode(['ok' => false, 'error' => 'Neues Passwort muss sich vom aktuellen unterscheiden.']);
+        exit;
+    }
+
+    if (!update_password($currentUser, $newPwd)) {
+        echo json_encode(['ok' => false, 'error' => 'Fehler beim Speichern des Passworts.']);
+        exit;
+    }
+    echo json_encode(['ok' => true, 'message' => 'Passwort erfolgreich geändert.']);
+    exit;
+}
+
+// ─── Nur Admins ab hier ───────────────────────────────────────────────────────
 if (!$currentAdmin) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'Kein Zugriff.']);
     exit;
 }
-
-$method = $_SERVER['REQUEST_METHOD'];
-$action = $_GET['action'] ?? '';
 
 // ─── GET: Benutzerliste ───────────────────────────────────────────────────────
 if ($method === 'GET') {
@@ -31,7 +76,8 @@ if ($method === 'POST' && $action === 'create') {
 
     if ($username === '') { echo json_encode(['ok' => false, 'error' => 'Kein Benutzername angegeben.']); exit; }
     if (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $username)) { echo json_encode(['ok' => false, 'error' => 'Benutzername enthält ungültige Zeichen.']); exit; }
-    if (strlen($password) < 8) { echo json_encode(['ok' => false, 'error' => 'Passwort muss mindestens 8 Zeichen lang sein.']); exit; }
+    $pwdErr = validate_password($password);
+    if ($pwdErr) { echo json_encode(['ok' => false, 'error' => $pwdErr]); exit; }
     if (user_exists($username)) { echo json_encode(['ok' => false, 'error' => "Benutzer '$username' existiert bereits."]); exit; }
 
     // Benutzerverzeichnis anlegen
@@ -56,7 +102,8 @@ if ($method === 'POST' && $action === 'reset_password') {
     $password = $body['password'] ?? '';
 
     if (!user_exists($username)) { echo json_encode(['ok' => false, 'error' => "Benutzer '$username' nicht gefunden."]); exit; }
-    if (strlen($password) < 8)   { echo json_encode(['ok' => false, 'error' => 'Neues Passwort muss mindestens 8 Zeichen lang sein.']); exit; }
+    $pwdErr = validate_password($password);
+    if ($pwdErr) { echo json_encode(['ok' => false, 'error' => $pwdErr]); exit; }
 
     if (!update_password($username, $password)) {
         echo json_encode(['ok' => false, 'error' => 'Fehler beim Aktualisieren des Passworts.']);

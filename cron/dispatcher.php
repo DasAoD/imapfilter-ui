@@ -1,17 +1,21 @@
 #!/usr/bin/env php
 <?php
 /**
- * IMAPFilter Dispatcher
- * Wird einmalig per systemd-Timer oder Cron jede Minute aufgerufen.
- * Prüft für jeden Benutzer, ob sein Intervall abgelaufen ist und
- * startet imapfilter bei Bedarf.
+ * IMAPFilter Dispatcher — nur als CLI-Skript ausführbar.
  */
+
+// Sicherheit: Aufruf nur per CLI erlaubt
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('Forbidden');
+}
 
 // Bootstrap
 define('DISPATCHER', true);
 $baseDir = dirname(__DIR__);
 require_once $baseDir . '/config.php';
 require_once $baseDir . '/lib/users.php';
+require_once $baseDir . '/lib/atomic.php';
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
 
@@ -35,7 +39,7 @@ function read_state(string $stateFile): array {
 }
 
 function write_state(string $stateFile, array $state): void {
-    file_put_contents($stateFile, json_encode($state, JSON_PRETTY_PRINT), LOCK_EX);
+    atomic_write_json($stateFile, $state);
 }
 
 // ─── Hauptlogik ───────────────────────────────────────────────────────────────

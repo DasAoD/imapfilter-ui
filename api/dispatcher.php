@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
+require_once dirname(__DIR__) . '/lib/atomic.php';
 header('Content-Type: application/json');
 
 $stateFile = rtrim($luaBaseDir, '/') . '/dispatcher_state.json';
@@ -70,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ? (json_decode(file_get_contents($paths['settings']), true) ?? [])
         : [];
     $settings['run_interval'] = $minutes;
-    if (file_put_contents($paths['settings'], json_encode($settings, JSON_PRETTY_PRINT)) === false) {
+    if (!atomic_write_json($paths['settings'], $settings, 0600)) {
         echo json_encode(['ok' => false, 'error' => 'Konnte Einstellungen nicht speichern.']);
         exit;
     }

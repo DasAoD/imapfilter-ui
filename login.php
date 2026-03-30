@@ -1,6 +1,16 @@
 <?php
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/users.php';
+require_once __DIR__ . '/lib/atomic.php';
+
+// Cookie-Flags vor session_start setzen
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'secure'   => true,
+    'httponly' => true,
+    'samesite' => 'Strict',
+]);
 session_start();
 
 // Noch kein Benutzer → Setup
@@ -15,24 +25,111 @@ if (!empty($_SESSION['imapfilter_logged_in'])) {
     exit;
 }
 
-$error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $user = trim($_POST['user'] ?? '');
-    $pass = $_POST['pass'] ?? '';
-    $u    = verify_user($user, $pass);
+// ─── Rate-Limiting ────────────────────────────────────────────────────────────
+define('RL_MAX_ATTEMPTS', 5);    // Max. Fehlversuche
+define('RL_WINDOW',       900);  // Sperrdauer in Sekunden (15 Min.)
+define('RL_FILE', '/srv/imapfilter/.login_attempts.json');
 
-    if ($u) {
-        session_regenerate_id(true);
-        $_SESSION['imapfilter_logged_in'] = true;
-        $_SESSION['username']             = $u['username'];
-        $_SESSION['is_admin']             = !empty($u['is_admin']);
-        header('Location: index.php');
-        exit;
+function rl_get_ip(): string {
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+
+function rl_load(): array {
+    if (!file_exists(RL_FILE)) return [];
+    $data = json_decode(file_get_contents(RL_FILE), true);
+    return is_array($data) ? $data : [];
+}
+
+function rl_save(array $data): void {
+    atomic_write_json(RL_FILE, $data, 0600);
+}
+
+function rl_is_blocked(string $ip): bool {
+    $data  = rl_load();
+    $entry = $data[$ip] ?? null;
+    if (!$entry) return false;
+    if ($entry['attempts'] >= RL_MAX_ATTEMPTS) {
+        if (time() - $entry['last_attempt'] < RL_WINDOW) return true;
+        // Sperre abgelaufen → zurücksetzen
+        unset($data[$ip]);
+        rl_save($data);
     }
-    $error = 'Benutzername oder Passwort falsch.';
+    return false;
+}
+
+function rl_record_failure(string $ip): void {
+    $data  = rl_load();
+    $entry = $data[$ip] ?? ['attempts' => 0, 'last_attempt' => 0];
+    // Fenster abgelaufen → neu starten
+    if (time() - $entry['last_attempt'] >= RL_WINDOW) {
+        $entry['attempts'] = 0;
+    }
+    $entry['attempts']++;
+    $entry['last_attempt'] = time();
+    $data[$ip] = $entry;
+    rl_save($data);
+
+    // Fehlversuch loggen
+    $logDir = rtrim($GLOBALS['logDir'] ?? '/var/log/imapfilter', '/');
+    $line   = '[' . date('Y-m-d H:i:s') . '] [login] Fehlversuch #' . $entry['attempts']
+            . ' von ' . $ip . "\n";
+    @file_put_contents($logDir . '/login.log', $line, FILE_APPEND | LOCK_EX);
+}
+
+function rl_reset(string $ip): void {
+    $data = rl_load();
+    unset($data[$ip]);
+    rl_save($data);
+}
+
+function rl_remaining_seconds(string $ip): int {
+    $data  = rl_load();
+    $entry = $data[$ip] ?? null;
+    if (!$entry) return 0;
+    return max(0, RL_WINDOW - (time() - $entry['last_attempt']));
+}
+
+// ─── Login-Verarbeitung ───────────────────────────────────────────────────────
+$ip    = rl_get_ip();
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (rl_is_blocked($ip)) {
+        $secs  = rl_remaining_seconds($ip);
+        $mins  = ceil($secs / 60);
+        $error = "Zu viele Fehlversuche. Bitte " . $mins . " Minute(n) warten.";
+    } else {
+        $user = trim($_POST['user'] ?? '');
+        $pass = $_POST['pass'] ?? '';
+        $u    = verify_user($user, $pass);
+
+        if ($u) {
+            rl_reset($ip);
+            session_regenerate_id(true);
+            $_SESSION['imapfilter_logged_in'] = true;
+            $_SESSION['username']             = $u['username'];
+            $_SESSION['is_admin']             = !empty($u['is_admin']);
+            $_SESSION['csrf_token']           = bin2hex(random_bytes(32));
+            header('Location: index.php');
+            exit;
+        }
+
+        rl_record_failure($ip);
+        $data     = rl_load();
+        $attempts = $data[$ip]['attempts'] ?? 1;
+        $remaining = RL_MAX_ATTEMPTS - $attempts;
+
+        if ($remaining <= 0) {
+            $error = 'Zu viele Fehlversuche. Bitte ' . ceil(RL_WINDOW / 60) . ' Minuten warten.';
+        } else {
+            $error = 'Benutzername oder Passwort falsch.'
+                   . ($remaining <= 2 ? ' Noch ' . $remaining . ' Versuch(e) vor Sperre.' : '');
+        }
+    }
 }
 
 $setupDone = isset($_GET['setup']);
+$blocked   = rl_is_blocked($ip);
 ?>
 <!DOCTYPE html>
 <html lang="de">
@@ -63,13 +160,16 @@ $setupDone = isset($_GET['setup']);
     <form method="post">
         <div class="form-group">
             <label class="form-label">Benutzername</label>
-            <input type="text" name="user" class="form-input" autocomplete="username" autofocus>
+            <input type="text" name="user" class="form-input" autocomplete="username" autofocus
+                   <?= $blocked ? 'disabled' : '' ?>>
         </div>
         <div class="form-group">
             <label class="form-label">Passwort</label>
-            <input type="password" name="pass" class="form-input" autocomplete="current-password">
+            <input type="password" name="pass" class="form-input" autocomplete="current-password"
+                   <?= $blocked ? 'disabled' : '' ?>>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">Anmelden</button>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px"
+                <?= $blocked ? 'disabled' : '' ?>>Anmelden</button>
     </form>
 </div>
 </div>

@@ -3,6 +3,7 @@
  * Benutzerverwaltung — liest/schreibt users.json
  * Format: [{ "username": "…", "password_hash": "…", "is_admin": bool }, …]
  */
+require_once __DIR__ . '/atomic.php';
 
 function users_file(): string {
     global $usersJson;
@@ -17,7 +18,7 @@ function load_users(): array {
 }
 
 function save_users(array $users): bool {
-    return file_put_contents(users_file(), json_encode(array_values($users), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false;
+    return atomic_write_json(users_file(), array_values($users));
 }
 
 function find_user(string $username): ?array {

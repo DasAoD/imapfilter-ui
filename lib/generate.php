@@ -4,6 +4,8 @@
  * Wird von api/generate.php und api/rules.php (Auto-Generate) genutzt.
  */
 
+require_once __DIR__ . '/atomic.php';
+
 function lua_str(string $s): string {
     $s = str_replace("\\", "\\\\", $s); // erst Backslash
     $s = str_replace("'",  "\\'",  $s); // dann Quote
@@ -22,10 +24,24 @@ function lua_rule_var(string $name): string {
     return 'r_' . trim($v, '_');
 }
 
-function make_lua_backup(string $file, string $backupDir): void {
+function make_lua_backup(string $file, string $backupDir, int $keep = 10): void {
     if (!file_exists($file)) return;
     if (!is_dir($backupDir)) mkdir($backupDir, 0770, true);
-    copy($file, rtrim($backupDir, '/') . '/' . basename($file) . '.' . date('Ymd-His') . '.bak');
+
+    // Backup anlegen
+    $dst = rtrim($backupDir, '/') . '/' . basename($file) . '.' . date('Ymd-His') . '.bak';
+    copy($file, $dst);
+
+    // Rotation: nur die neuesten $keep Backups dieser Datei behalten
+    $pattern = rtrim($backupDir, '/') . '/' . basename($file) . '.*.bak';
+    $files   = glob($pattern);
+    if ($files && count($files) > $keep) {
+        sort($files); // älteste zuerst
+        $toDelete = array_slice($files, 0, count($files) - $keep);
+        foreach ($toDelete as $old) {
+            @unlink($old);
+        }
+    }
 }
 
 /**
@@ -78,15 +94,18 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
 
     // ── config.lua ────────────────────────────────────────────────────────────
     $sslMode   = ($settings['ssl'] ?? true) ? 'ssl' : 'none';
+    // Zertifikatsprüfung nur deaktivieren wenn explizit gesetzt
+    $sslVerify = empty($settings['ssl_novalidate']) ? 'true' : 'false';
     $configLua = $header . "\n"
         . "options.timeout   = 120\n"
         . "options.subscribe = true\n\n"
         . "account = IMAP {\n"
-        . "    server   = " . lua_str($settings['host'])                   . ",\n"
-        . "    port     = " . (int)($settings['port'] ?? 993)              . ",\n"
-        . "    ssl      = " . lua_str($sslMode)                            . ",\n"
-        . "    username = " . lua_str($settings['user'])                   . ",\n"
-        . "    password = " . lua_str($settings['pass'])                   . ",\n"
+        . "    server      = " . lua_str($settings['host'])        . ",\n"
+        . "    port        = " . (int)($settings['port'] ?? 993)   . ",\n"
+        . "    ssl         = " . lua_str($sslMode)                 . ",\n"
+        . "    username    = " . lua_str($settings['user'])        . ",\n"
+        . "    password    = " . lua_str($settings['pass'])        . ",\n"
+        . "    certificate = { verify = $sslVerify },\n"
         . "}\n\n"
         . "dofile(" . lua_str($paths['folders']) . ")\n"
         . "dofile(" . lua_str($paths['filters']) . ")\n";
@@ -184,16 +203,16 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
 
     // ── Backups + Schreiben ───────────────────────────────────────────────────
     try {
-        make_lua_backup($paths['config'],  $paths['backups']);
+        // config.lua enthält Klartext-Passwörter — kein Backup davon anlegen
         make_lua_backup($paths['folders'], $paths['backups']);
         make_lua_backup($paths['filters'], $paths['backups']);
 
         foreach ([
-            $paths['config']  => $configLua,
-            $paths['folders'] => $foldersLua,
-            $paths['filters'] => $filtersLua,
-        ] as $file => $content) {
-            if (file_put_contents($file, $content) === false) {
+            $paths['config']  => [$configLua,  0600],
+            $paths['folders'] => [$foldersLua, 0640],
+            $paths['filters'] => [$filtersLua, 0640],
+        ] as $file => [$content, $mode]) {
+            if (!atomic_write($file, $content, $mode)) {
                 throw new RuntimeException("Konnte $file nicht schreiben.");
             }
         }

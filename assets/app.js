@@ -4,11 +4,72 @@ const App = {
 
     // ─── State ─────────────────────────────────────────────────────────────────
     state: {
-        rules:       null,   // { version, spam, rules[] }
+        rules:       null,
         folders:     [],
         currentView: '',
         dragSrcIdx:  null,
         modalSaveFn: null,
+    },
+
+    // ─── Passwort-Stärke ───────────────────────────────────────────────────────
+    // Gibt HTML für Anforderungen + Stärke-Indikator zurück
+    pwdHtml(inputId) {
+        return `
+<div class="text-sm text-muted" style="margin-top:6px;line-height:1.8">
+  Mindestens: <strong>10 Zeichen</strong>,
+  einen <strong>Großbuchstaben</strong>,
+  einen <strong>Kleinbuchstaben</strong>,
+  eine <strong>Zahl</strong> und
+  ein <strong>Sonderzeichen</strong> (!@#$%^&amp;*-_=+?).
+</div>
+<div style="margin-top:8px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+      <div id="pwd-bar-${inputId}" style="height:100%;width:0%;border-radius:3px;transition:width .3s,background .3s"></div>
+    </div>
+    <span id="pwd-label-${inputId}" class="text-sm text-muted" style="min-width:80px"></span>
+  </div>
+</div>`;
+    },
+
+    pwdCheck(inputId) {
+        const val   = document.getElementById(inputId)?.value || '';
+        const bar   = document.getElementById('pwd-bar-' + inputId);
+        const label = document.getElementById('pwd-label-' + inputId);
+        if (!bar || !label) return;
+
+        let score = 0;
+        if (val.length >= 10)                    score++;
+        if (val.length >= 14)                    score++;
+        if (/[A-Z]/.test(val))                   score++;
+        if (/[a-z]/.test(val))                   score++;
+        if (/[0-9]/.test(val))                   score++;
+        if (/[!@#$%^&*\-_=+?]/.test(val))       score++;
+
+        const levels = [
+            { pct: '0%',   bg: 'transparent', text: '' },
+            { pct: '20%',  bg: '#ef4444',     text: 'Sehr schwach' },
+            { pct: '35%',  bg: '#f97316',     text: 'Schwach' },
+            { pct: '55%',  bg: '#eab308',     text: 'Mittel' },
+            { pct: '75%',  bg: '#3b82f6',     text: 'Stark' },
+            { pct: '90%',  bg: '#10b981',     text: 'Sehr stark' },
+            { pct: '100%', bg: '#10b981',     text: 'Ausgezeichnet' },
+        ];
+        const lvl = levels[Math.min(score, levels.length - 1)];
+        bar.style.width      = lvl.pct;
+        bar.style.background = lvl.bg;
+        label.textContent    = lvl.text;
+        label.style.color    = lvl.bg;
+    },
+
+    pwdValidate(val) {
+        const errs = [];
+        if (val.length < 10)                       errs.push('mindestens 10 Zeichen');
+        if (!/[A-Z]/.test(val))                    errs.push('einen Großbuchstaben');
+        if (!/[a-z]/.test(val))                    errs.push('einen Kleinbuchstaben');
+        if (!/[0-9]/.test(val))                    errs.push('eine Zahl');
+        if (!/[!@#$%^&*\-_=+?]/.test(val))        errs.push('ein Sonderzeichen (!@#$%^&*-_=+?)');
+        return errs;
     },
 
     // ─── Init ──────────────────────────────────────────────────────────────────
@@ -19,7 +80,7 @@ const App = {
 
     // ─── Router ────────────────────────────────────────────────────────────────
     navigate() {
-        const valid = ['rules', 'folders', 'run', 'editor', 'settings', 'admin', 'dispatcher'];
+        const valid = ['rules', 'folders', 'run', 'editor', 'settings', 'password', 'admin', 'dispatcher'];
         const hash  = location.hash.slice(1) || 'rules';
         const view  = valid.includes(hash) ? hash : 'rules';
 
@@ -47,7 +108,10 @@ const App = {
     async apiPost(url, data = {}) {
         const r = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.CSRF_TOKEN || '',
+            },
             body: JSON.stringify(data),
         });
         if (!r.ok && r.status === 401) { location.href = 'login.php'; return null; }
@@ -89,7 +153,8 @@ const App = {
     esc(s) {
         return String(s)
             .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+            .replace(/'/g,'&#039;');
     },
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -226,14 +291,21 @@ const App = {
         return `<select class="form-select" id="${id}" onchange="${onchange || ''}">${opts}</select>`;
     },
 
+    // ── Debounce helper ────────────────────────────────────────────────────────
+    _debounceTimers: {},
+    debounce(key, fn, ms = 600) {
+        clearTimeout(this._debounceTimers[key]);
+        this._debounceTimers[key] = setTimeout(fn, ms);
+    },
+
     // ── Spam helpers ────────────────────────────────────────────────────────────
     setSpamEnabled(v) {
         this.state.rules.spam.enabled = v;
         document.getElementById('spam-details').style.cssText = v ? '' : 'opacity:.4;pointer-events:none';
         this.saveRules();
     },
-    updateSpamField()  { this.state.rules.spam.header_field = document.getElementById('spam-field').value; this.saveRules(); },
-    updateSpamValue()  { this.state.rules.spam.header_value = document.getElementById('spam-value').value; this.saveRules(); },
+    updateSpamField()  { this.state.rules.spam.header_field = document.getElementById('spam-field').value; this.debounce('spam', () => this.saveRules()); },
+    updateSpamValue()  { this.state.rules.spam.header_value = document.getElementById('spam-value').value; this.debounce('spam', () => this.saveRules()); },
     updateSpamTarget(v){ this.state.rules.spam.target = v; this.saveRules(); },
 
     addWhitelistEntry() {
@@ -434,10 +506,18 @@ const App = {
 
     deleteRule(idx) {
         const r = this.state.rules.rules[idx];
-        if (!confirm(`Regel „${r.name}" wirklich löschen?`)) return;
-        this.state.rules.rules.splice(idx, 1);
-        this.saveRules();
-        this.renderRules();
+        this.openModal(
+            'Regel löschen',
+            `<p>Regel <strong>${this.esc(r.name)}</strong> wirklich löschen?</p>`,
+            () => {
+                this.state.rules.rules.splice(idx, 1);
+                this.saveRules();
+                this.closeModal();
+                this.renderRules();
+            },
+            'Löschen'
+        );
+        document.getElementById('modal-save-btn').classList.replace('btn-primary', 'btn-danger');
     },
 
     // ── Drag & drop ────────────────────────────────────────────────────────────
@@ -521,16 +601,75 @@ const App = {
         }
 
         const items = folders.map(f => {
-            const depth = (f.match(/\//g) || []).length;
-            const cls   = depth > 0 ? ` indent${Math.min(depth, 3)}` : '';
-            const icon  = f === 'INBOX' ? '📥' : f.toLowerCase().includes('spam') || f.toLowerCase().includes('junk') ? '🚫' : depth > 0 ? '📂' : '📁';
-            return `<div class="folder-item${cls}"><span class="folder-icon">${icon}</span>${this.esc(f)}</div>`;
+            const depth    = (f.match(/\//g) || []).length;
+            const cls      = depth > 0 ? ` indent${Math.min(depth, 3)}` : '';
+            const icon     = f === 'INBOX' ? '📥' : f.toLowerCase().includes('spam') || f.toLowerCase().includes('junk') ? '🚫' : depth > 0 ? '📂' : '📁';
+            const isInbox  = f === 'INBOX';
+            const actions  = isInbox ? '' : `
+  <div style="display:flex;gap:6px;margin-left:auto">
+    <button class="btn btn-sm btn-secondary btn-icon" title="Umbenennen" onclick="App.openRenameFolderModal('${this.esc(f)}')">✏️</button>
+    <button class="btn btn-sm btn-danger btn-icon"    title="Löschen"    onclick="App.openDeleteFolderModal('${this.esc(f)}')">🗑</button>
+  </div>`;
+            return `<div class="folder-item${cls}" style="justify-content:space-between"><div style="display:flex;align-items:center;gap:8px"><span class="folder-icon">${icon}</span>${this.esc(f)}</div>${actions}</div>`;
         }).join('');
 
         el.innerHTML = `<div class="card">
   <div class="card-title">📁 IMAP-Ordner <span class="badge">${folders.length}</span></div>
   <div class="folder-list">${items}</div>
 </div>`;
+    },
+
+    openRenameFolderModal(name) {
+        const body = `
+<div class="form-group">
+  <label class="form-label">Aktueller Name</label>
+  <input class="form-input" value="${this.esc(name)}" readonly style="opacity:.6">
+</div>
+<div class="form-group">
+  <label class="form-label">Neuer Name</label>
+  <input class="form-input" id="rename-folder-new" value="${this.esc(name)}" autofocus
+         onkeydown="if(event.key==='Enter') document.getElementById('modal-save-btn').click()">
+  <div class="text-sm text-muted mt-2">Unterordner mit <code>/</code> trennen.</div>
+</div>`;
+        this.openModal('Ordner umbenennen', body, () => this._renameFolder(name));
+    },
+
+    async _renameFolder(oldName) {
+        const newName = document.getElementById('rename-folder-new')?.value.trim();
+        if (!newName || newName === oldName) { this.closeModal(); return; }
+        const res = await this.apiPost('api/folders.php?action=rename', { old_name: oldName, new_name: newName });
+        if (res && res.ok) {
+            this.toast(res.message || 'Ordner umbenannt.');
+            this.closeModal();
+            await this.loadFolders(true);
+        } else {
+            this.toast(res?.error || 'Fehler beim Umbenennen.', 'error');
+        }
+    },
+
+    openDeleteFolderModal(name) {
+        const body = `
+<p>Ordner <strong>${this.esc(name)}</strong> wirklich löschen?</p>
+<p class="text-muted text-sm" style="margin-top:8px">
+  Alle Mails in diesem Ordner werden vorher in die <strong>INBOX</strong> verschoben.
+</p>`;
+        this.openModal('Ordner löschen', body, () => this._deleteFolder(name), 'Löschen');
+        document.getElementById('modal-save-btn').classList.replace('btn-primary', 'btn-danger');
+    },
+
+    async _deleteFolder(name) {
+        const res = await fetch('api/folders.php', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+            body: JSON.stringify({ name }),
+        }).then(r => r.json());
+        if (res && res.ok) {
+            this.toast(res.message || 'Ordner gelöscht.');
+            this.closeModal();
+            await this.loadFolders(true);
+        } else {
+            this.toast(res?.error || 'Fehler beim Löschen.', 'error');
+        }
     },
 
     openCreateFolderModal() {
@@ -652,7 +791,8 @@ const App = {
             const s = res.settings;
             document.getElementById('s-host').value    = s.host  || '';
             document.getElementById('s-port').value    = s.port  || 993;
-            document.getElementById('s-ssl').checked   = !!s.ssl;
+            document.getElementById('s-ssl').checked          = !!s.ssl;
+            document.getElementById('s-ssl-novalidate').checked = !!s.ssl_novalidate;
             document.getElementById('s-user').value    = s.user  || '';
             document.getElementById('s-pass').value    = '';  // never prefill password
             if (s.pass_set) {
@@ -665,11 +805,12 @@ const App = {
 
     async saveSettings() {
         const data = {
-            host: document.getElementById('s-host').value.trim(),
-            port: parseInt(document.getElementById('s-port').value, 10),
-            ssl:  document.getElementById('s-ssl').checked,
-            user: document.getElementById('s-user').value.trim(),
-            pass: document.getElementById('s-pass').value,
+            host:           document.getElementById('s-host').value.trim(),
+            port:           parseInt(document.getElementById('s-port').value, 10),
+            ssl:            document.getElementById('s-ssl').checked,
+            ssl_novalidate: document.getElementById('s-ssl-novalidate').checked,
+            user:           document.getElementById('s-user').value.trim(),
+            pass:           document.getElementById('s-pass').value,
         };
         const res = await this.apiPost('api/settings.php?action=save', data);
         if (res && res.ok) {
@@ -695,6 +836,53 @@ const App = {
         } else {
             statusEl.innerHTML = `<span class="status-dot error"></span> ${this.esc(res?.error || 'Verbindung fehlgeschlagen.')}`;
             this.toast(res?.error || 'Verbindung fehlgeschlagen.', 'error');
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PASSWORD VIEW
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    initPassword() {
+        // Stärke-Indikator ins View einbauen
+        const el = document.getElementById('cp-strength');
+        if (el) el.innerHTML = this.pwdHtml('cp-new');
+        // Felder leeren
+        ['cp-current','cp-new','cp-new2'].forEach(id => {
+            const f = document.getElementById(id);
+            if (f) f.value = '';
+        });
+        const status = document.getElementById('cp-status');
+        if (status) status.innerHTML = '';
+    },
+
+    async changePassword() {
+        const current = document.getElementById('cp-current').value;
+        const newPwd  = document.getElementById('cp-new').value;
+        const newPwd2 = document.getElementById('cp-new2').value;
+        const status  = document.getElementById('cp-status');
+
+        if (!current) { this.toast('Bitte aktuelles Passwort eingeben.', 'warn'); return; }
+
+        const errs = this.pwdValidate(newPwd);
+        if (errs.length) { this.toast('Neues Passwort benötigt: ' + errs.join(', ') + '.', 'warn'); return; }
+        if (newPwd !== newPwd2) { this.toast('Neue Passwörter stimmen nicht überein.', 'warn'); return; }
+        if (newPwd === current) { this.toast('Neues Passwort muss sich vom aktuellen unterscheiden.', 'warn'); return; }
+
+        const res = await this.apiPost('api/users.php?action=change_password', {
+            current_password: current,
+            new_password:     newPwd,
+        });
+
+        if (res && res.ok) {
+            this.toast('Passwort erfolgreich geändert.');
+            ['cp-current','cp-new','cp-new2'].forEach(id => {
+                const f = document.getElementById(id);
+                if (f) f.value = '';
+            });
+            this.pwdCheck('cp-new');
+        } else {
+            this.toast(res?.error || 'Fehler beim Ändern.', 'error');
         }
     },
 
@@ -752,8 +940,10 @@ const App = {
          pattern="[a-zA-Z0-9_\\-\\.]+" onkeydown="if(event.key==='Enter') document.getElementById('modal-save-btn').click()">
 </div>
 <div class="form-group">
-  <label class="form-label">Passwort (min. 8 Zeichen)</label>
-  <input type="password" class="form-input" id="nu-password" autocomplete="new-password">
+  <label class="form-label">Passwort</label>
+  <input type="password" class="form-input" id="nu-password" autocomplete="new-password"
+         oninput="App.pwdCheck('nu-password')">
+  ${this.pwdHtml('nu-password')}
 </div>
 <div class="form-group">
   <label class="form-label">Passwort wiederholen</label>
@@ -774,7 +964,9 @@ const App = {
 
         if (!username)             { this.toast('Benutzername eingeben.', 'warn'); return; }
         if (!/^[a-zA-Z0-9_\-\.]+$/.test(username)) { this.toast('Ungültige Zeichen im Benutzernamen.', 'warn'); return; }
-        if (password.length < 8)   { this.toast('Passwort zu kurz (min. 8 Zeichen).', 'warn'); return; }
+
+        const errs = this.pwdValidate(password);
+        if (errs.length) { this.toast('Passwort benötigt: ' + errs.join(', ') + '.', 'warn'); return; }
         if (password !== password2) { this.toast('Passwörter stimmen nicht überein.', 'warn'); return; }
 
         const res = await this.apiPost('api/users.php?action=create', { username, password, is_admin });
@@ -791,8 +983,10 @@ const App = {
         const body = `
 <p class="text-muted text-sm" style="margin-bottom:14px">Neues Passwort für <strong>${this.esc(username)}</strong> setzen.</p>
 <div class="form-group">
-  <label class="form-label">Neues Passwort (min. 8 Zeichen)</label>
-  <input type="password" class="form-input" id="rp-password" autocomplete="new-password" autofocus>
+  <label class="form-label">Neues Passwort</label>
+  <input type="password" class="form-input" id="rp-password" autocomplete="new-password" autofocus
+         oninput="App.pwdCheck('rp-password')">
+  ${this.pwdHtml('rp-password')}
 </div>
 <div class="form-group">
   <label class="form-label">Wiederholen</label>
@@ -804,8 +998,9 @@ const App = {
     async _saveResetPassword(username) {
         const password  = document.getElementById('rp-password').value;
         const password2 = document.getElementById('rp-password2').value;
-        if (password.length < 8)    { this.toast('Passwort zu kurz (min. 8 Zeichen).', 'warn'); return; }
-        if (password !== password2)  { this.toast('Passwörter stimmen nicht überein.', 'warn'); return; }
+        const errs = this.pwdValidate(password);
+        if (errs.length)            { this.toast('Passwort benötigt: ' + errs.join(', ') + '.', 'warn'); return; }
+        if (password !== password2) { this.toast('Passwörter stimmen nicht überein.', 'warn'); return; }
 
         const res = await this.apiPost('api/users.php?action=reset_password', { username, password });
         if (res && res.ok) {
@@ -907,18 +1102,27 @@ const App = {
     },
 
     async deleteUser(username) {
-        if (!confirm(`Benutzer „${username}" wirklich löschen?\n\nDie Dateien unter /srv/imapfilter/${username}/ bleiben erhalten.`)) return;
-        const res = await fetch('api/users.php', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-        }).then(r => r.json());
-        if (res && res.ok) {
-            this.toast(res.message || 'Benutzer gelöscht.');
-            await this.loadUsers();
-        } else {
-            this.toast(res?.error || 'Fehler beim Löschen.', 'error');
-        }
+        this.openModal(
+            'Benutzer löschen',
+            `<p>Benutzer <strong>${this.esc(username)}</strong> wirklich löschen?</p>
+             <p class="text-muted text-sm" style="margin-top:8px">Die Dateien unter <code>/srv/imapfilter/${this.esc(username)}/</code> bleiben erhalten.</p>`,
+            async () => {
+                const res = await fetch('api/users.php', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+                    body: JSON.stringify({ username }),
+                }).then(r => r.json());
+                if (res && res.ok) {
+                    this.toast(res.message || 'Benutzer gelöscht.');
+                    this.closeModal();
+                    await this.loadUsers();
+                } else {
+                    this.toast(res?.error || 'Fehler beim Löschen.', 'error');
+                }
+            },
+            'Löschen'
+        );
+        document.getElementById('modal-save-btn').classList.replace('btn-primary', 'btn-danger');
     },
 
 };

@@ -16,15 +16,27 @@ Unterstützt mehrere Benutzer — jeder mit eigenem Mailkonto, eigenen Regeln un
   - Zielordner per Dropdown (live vom IMAP-Server)
   - Reihenfolge per Drag & Drop
   - Regeln aktivieren / deaktivieren
-  - **Lua-Dateien werden automatisch bei jeder Regeländerung neu generiert**
+  - Lua-Dateien werden **automatisch bei jeder Regeländerung** neu generiert
 - **Spam-Konfiguration** mit Whitelist (kommagetrennte Eingabe)
-- **Lua-Generierung** aus JSON-Regeln inkl. `config.lua` (mit automatischem Backup)
+- **Lua-Generierung** aus JSON-Regeln inkl. `config.lua` (mit automatischem Backup, max. 10 pro Datei)
 - **Dispatcher** — zentrales Scheduling für alle Benutzer (systemd / cron / Hoster)
   - Intervall pro Benutzer frei in Minuten einstellbar
   - Einrichtungsanleitung und Status-Übersicht im Admin-Bereich
-- **IMAP-Ordner** live anzeigen und anlegen (`php-imap`)
+- **IMAP-Ordner** live anzeigen, anlegen, umbenennen und löschen (`php-imap`)
+  - Beim Löschen werden Mails automatisch in die INBOX verschoben
 - **Lua-Editor** als Fallback für direkte Anpassungen
 - **imapfilter ausführen** mit Live-Logausgabe
+- **Passwort ändern** für alle Benutzer (mit Stärke-Indikator)
+
+### Sicherheit
+
+- CSRF-Schutz auf allen schreibenden API-Endpunkten
+- Session-Cookies mit `Secure`, `HttpOnly`, `SameSite=Strict`
+- Login Rate-Limiting: 5 Fehlversuche → 15 Minuten Sperre pro IP
+- Atomare Schreiboperationen für alle JSON- und Lua-Dateien
+- Strikte Dateiberechtigungen (`config.lua` und `imap_settings.json` mit `0600`)
+- TLS-Zertifikatsprüfung standardmäßig aktiv
+- `cron/` und `lib/` per Nginx gesperrt
 
 ---
 
@@ -91,34 +103,43 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/imapfilter.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/imapfilter.example.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     root  /var/www/imapfilter-ui;
     index index.php;
 
-    # Zugriff nur aus LAN / VPN
+    access_log /var/log/nginx/imapfilter.example.com.access.log;
+    error_log  /var/log/nginx/imapfilter.example.com.error.log;
+
+    # Security-Header
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     location / {
-        allow 127.0.0.1;
-        allow 10.8.0.0/24;        # WireGuard VPN
-        allow 192.168.0.0/24;     # LAN
-        allow 192.168.4.0/24;     # weiteres LAN-Segment
-        deny  all;
         try_files $uri $uri/ /index.php$is_args$args;
     }
 
     location ~ \.php$ {
-        allow 127.0.0.1;
-        allow 10.8.0.0/24;
-        allow 192.168.0.0/24;
-        allow 192.168.4.0/24;
-        deny  all;
         include fastcgi_params;
         fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
     }
 
+    # Versteckte Dateien sperren
     location ~ /\.ht { deny all; }
+
+    # CLI-Verzeichnisse sperren
+    location ^~ /cron/ { deny all; }
+    location ^~ /lib/  { deny all; }
 }
 ```
+
+> **Hinweis:** Falls das UI nur aus dem LAN/VPN erreichbar sein soll, können in den
+> `location`-Blöcken `allow`/`deny`-Regeln ergänzt werden.
 
 Aktivieren und neu laden:
 
@@ -130,7 +151,8 @@ nginx -t && systemctl reload nginx
 ### 6. Ersteinrichtung im Browser
 
 Beim ersten Aufruf erscheint automatisch `setup.php`.  
-Dort wird der erste Admin-Account angelegt. Danach:
+Dort wird der erste Admin-Account angelegt. Passwort-Anforderungen: min. 10 Zeichen,
+Groß-/Kleinbuchstaben, Zahl, Sonderzeichen. Danach:
 
 1. **IMAP-Einstellungen** → Zugangsdaten hinterlegen, Verbindung testen, Intervall setzen
 2. **Filterregeln** → Spam-Filter konfigurieren, Regeln anlegen
@@ -176,60 +198,62 @@ Cron-Job anlegen: `* * * * *` → `/usr/bin/php /var/www/imapfilter-ui/cron/disp
 ```
 /var/www/imapfilter-ui/
 ├── api/
-│   ├── auth_check.php    # API-Authentifizierung + User-Kontext
+│   ├── auth_check.php    # API-Authentifizierung + CSRF-Prüfung
 │   ├── dispatcher.php    # Dispatcher-Status + Intervall-API
 │   ├── editor.php        # Lua-Dateien lesen/schreiben
-│   ├── folders.php       # IMAP-Ordner anzeigen / anlegen
+│   ├── folders.php       # IMAP-Ordner anzeigen / anlegen / umbenennen / löschen
 │   ├── generate.php      # Lua + config.lua aus JSON generieren
 │   ├── rules.php         # Regeln CRUD + Auto-Generate
 │   ├── run.php           # imapfilter ausführen / Log lesen
 │   ├── settings.php      # IMAP-Einstellungen
-│   └── users.php         # Admin: Benutzerverwaltung
+│   └── users.php         # Benutzerverwaltung (Admin + eigenes Passwort)
 ├── assets/
 │   ├── app.js            # Frontend-Anwendungslogik
 │   └── style.css         # Dark-Theme CSS
 ├── cron/
-│   ├── dispatcher.php                 # Zentrales Dispatcher-Skript
+│   ├── dispatcher.php                 # Zentrales Dispatcher-Skript (nur CLI)
 │   ├── imapfilter-dispatcher.service  # systemd Service
 │   ├── imapfilter-dispatcher.timer    # systemd Timer
 │   └── imapfilter-dispatcher.cron     # Cron-Datei für /etc/cron.d/
 ├── lib/
+│   ├── atomic.php        # Atomare Schreiboperationen
 │   ├── generate.php      # Lua-Generierungslogik (geteilt)
 │   └── users.php         # Benutzerverwaltungs-Funktionen
 ├── auth.php              # Session-Check (Redirect)
 ├── config.php            # Konfiguration (Pfade)
 ├── index.php             # Haupt-UI-Shell
-├── login.php             # Loginseite
+├── login.php             # Loginseite (mit Rate-Limiting)
 ├── logout.php            # Logout
+├── robots.txt            # Crawler-Ausschluss
 └── setup.php             # Ersteinrichtung (Admin-Account)
 
 /srv/imapfilter/
 ├── users.json                 # Benutzerdatenbank (nicht im Repo)
 ├── dispatcher_state.json      # Laufzeitzustand des Dispatchers
+├── .login_attempts.json       # Rate-Limiting-Daten (automatisch)
 └── <username>/
-    ├── config.lua             # Generiert: IMAP-Verbindung + dofile-Includes
-    ├── filters.lua            # Generiert: Filterregeln
-    ├── folders.lua            # Generiert: Ordner-Referenzen
-    ├── rules.json             # UI-Regeln (nicht im Repo)
-    ├── imap_settings.json     # IMAP-Zugangsdaten + Intervall (nicht im Repo)
-    └── backups/               # Automatische Backups bei jeder Generierung
+    ├── config.lua             # Generiert: IMAP-Verbindung + dofile-Includes (0600)
+    ├── filters.lua            # Generiert: Filterregeln (0640)
+    ├── folders.lua            # Generiert: Ordner-Referenzen (0640)
+    ├── rules.json             # UI-Regeln (nicht im Repo, 0640)
+    ├── imap_settings.json     # IMAP-Zugangsdaten + Intervall (nicht im Repo, 0600)
+    └── backups/               # Automatische Backups (max. 10 pro Datei)
 
 /var/log/imapfilter/
 ├── dispatcher.log        # Dispatcher-Protokoll
-└── <username>.log        # Log pro Benutzer
+├── login.log             # Login-Fehlversuche
+└── <username>.log        # imapfilter-Ausgabe pro Benutzer
 ```
 
 ---
 
 ## Sicherheitshinweise
 
-- Web-UI ist ausschließlich aus VPN/LAN erreichbar — niemals öffentlich freigeben
 - `users.json`, `rules.json` und `imap_settings.json` sind im `.gitignore`
-- `imap_settings.json` enthält das IMAP-Passwort im Klartext → Dateiberechtigungen prüfen:
-  ```bash
-  chmod 640 /srv/imapfilter/*/imap_settings.json
-  chown www-data:www-data /srv/imapfilter/*/imap_settings.json
-  ```
+- `imap_settings.json` und `config.lua` enthalten das IMAP-Passwort — werden mit `0600` geschrieben
+- Login Rate-Limiting: 5 Fehlversuche → 15 Min. Sperre; Fehlversuche werden in `login.log` protokolliert
+- CSRF-Token wird bei jedem Login neu generiert und bei allen schreibenden API-Aufrufen geprüft
+- Passwort-Anforderungen werden client- und serverseitig erzwungen
 - Niemals systemd-Timer und Cron gleichzeitig für den Dispatcher betreiben
 
 ---

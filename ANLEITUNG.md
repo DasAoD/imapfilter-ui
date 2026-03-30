@@ -38,9 +38,10 @@ sortiert und in Ordner verschiebt — ohne dass eine E-Mail heruntergeladen werd
 Das **Web-UI** ist eine Benutzeroberfläche im Browser, mit der du:
 
 - Filterregeln bequem per Formular verwaltest (kein manuelles Editieren von Konfigurationsdateien)
-- IMAP-Ordner direkt im Browser anlegst
+- IMAP-Ordner direkt im Browser anlegst, umbenennst und löschst
 - Den Ausführungsintervall pro Benutzer einstellst
 - Mehrere Benutzer (z. B. Familienmitglieder) mit jeweils eigenem Mailkonto verwaltest
+- Dein eigenes Passwort jederzeit ändern kannst
 
 **Wichtig:** Mails verbleiben physisch beim Mailhoster — IMAPFilter greift nur per IMAP darauf zu.
 
@@ -282,7 +283,13 @@ Rufe die URL deines Web-UI im Browser auf (z. B. `https://imapfilter.beispiel.de
 **Beim allerersten Aufruf** erscheint automatisch die Seite `setup.php`:
 
 1. **Benutzername** eingeben (nur Buchstaben, Zahlen, `-`, `_`, `.` erlaubt — z. B. `admin`)
-2. **Passwort** eingeben (mindestens 8 Zeichen)
+2. **Passwort** eingeben — es muss folgende Anforderungen erfüllen:
+   - Mindestens **10 Zeichen**
+   - Mindestens ein **Großbuchstabe** (A–Z)
+   - Mindestens ein **Kleinbuchstabe** (a–z)
+   - Mindestens eine **Zahl** (0–9)
+   - Mindestens ein **Sonderzeichen** (`!@#$%^&*-_=+?`)
+   - Ein **Stärke-Indikator** zeigt beim Tippen an, wie sicher das Passwort ist
 3. **Passwort wiederholen**
 4. Auf **„Admin-Account anlegen"** klicken
 
@@ -576,7 +583,7 @@ rm /var/log/imapfilter/<benutzername>.log
 
 ---
 
-## 12. Ordner anlegen
+## 12. Ordner verwalten
 
 Klicke in der Seitenleiste auf **📁 Ordner**.
 
@@ -585,6 +592,17 @@ Die Ordner werden live vom IMAP-Server abgerufen und angezeigt.
 **Neuen Ordner anlegen:**
 
 Klicke auf **„+ Ordner anlegen"** → Namen eingeben → **„Speichern"**.
+
+**Ordner umbenennen:**
+
+Klicke auf das ✏️-Symbol neben dem Ordnernamen → neuen Namen eingeben → **„Speichern"**.
+
+**Ordner löschen:**
+
+Klicke auf das 🗑-Symbol neben dem Ordnernamen → Bestätigung im Modal.
+
+> ⚠️ Alle Mails im gelöschten Ordner werden automatisch in die **INBOX** verschoben,
+> bevor der Ordner gelöscht wird. Die INBOX selbst kann nicht gelöscht oder umbenannt werden.
 
 Für Unterordner einen `/` als Trennzeichen verwenden:
 
@@ -595,7 +613,7 @@ Für Unterordner einen `/` als Trennzeichen verwenden:
 | `#servermails/Grafana` | Unterordner „Grafana" unter „#servermails" |
 
 > **Hinweis:** Manche IMAP-Server erlauben keine Sonderzeichen oder bestimmte Ordnernamen.
-> Falls das Anlegen fehlschlägt, einen einfacheren Namen versuchen.
+> Falls eine Aktion fehlschlägt, einen einfacheren Namen versuchen.
 
 ---
 
@@ -623,6 +641,7 @@ Der Lua-Editor unter **📝 Lua-Editor** ermöglicht die direkte Bearbeitung von
 |---|---|
 | `/var/log/imapfilter/<benutzername>.log` | IMAPFilter-Ausgabe pro Benutzer |
 | `/var/log/imapfilter/dispatcher.log` | Dispatcher-Protokoll (wann welcher Benutzer gestartet wurde) |
+| `/var/log/imapfilter/login.log` | Fehlgeschlagene Login-Versuche (IP, Zeitstempel, Versuch-Nr.) |
 | `/var/log/nginx/error.log` | Nginx-Fehler |
 | `/var/log/php8.3-fpm.log` | PHP-Fehler |
 
@@ -655,6 +674,15 @@ systemctl restart php8.3-fpm
 - SSL aktiviert lassen (Port 993)
 - Beim Hoster prüfen, ob IMAP aktiviert ist
 
+**„Zu viele Fehlversuche" beim Login:**
+
+Nach 5 falschen Login-Versuchen wird die IP für 15 Minuten gesperrt.
+Die Sperre läuft automatisch ab. Admin kann die Datei manuell löschen:
+
+```bash
+rm /srv/imapfilter/.login_attempts.json
+```
+
 **Dispatcher läuft, aber IMAPFilter startet nicht:**
 
 ```bash
@@ -673,10 +701,10 @@ journalctl -u imapfilter-dispatcher.service -n 30
 ```
 /var/www/imapfilter-ui/          ← Web-UI (Webroot)
 ├── api/                         ← Backend-API (PHP)
-│   ├── auth_check.php
+│   ├── auth_check.php           ← Session-Check + CSRF-Prüfung
 │   ├── dispatcher.php
 │   ├── editor.php
-│   ├── folders.php
+│   ├── folders.php              ← Ordner anzeigen/anlegen/umbenennen/löschen
 │   ├── generate.php
 │   ├── rules.php
 │   ├── run.php
@@ -686,32 +714,37 @@ journalctl -u imapfilter-dispatcher.service -n 30
 │   ├── app.js                   ← Frontend-Logik
 │   └── style.css                ← Design
 ├── cron/
-│   ├── dispatcher.php           ← Dispatcher-Skript
+│   ├── dispatcher.php           ← Dispatcher-Skript (nur CLI)
 │   ├── imapfilter-dispatcher.service  ← systemd Service
 │   ├── imapfilter-dispatcher.timer    ← systemd Timer
 │   └── imapfilter-dispatcher.cron     ← Cron-Datei
 ├── lib/
+│   ├── atomic.php               ← Atomare Schreiboperationen
+│   ├── generate.php             ← Lua-Generierungslogik
 │   └── users.php                ← Benutzerverwaltungs-Funktionen
 ├── auth.php
 ├── config.php                   ← Konfiguration (Pfade)
 ├── index.php                    ← Haupt-UI
-├── login.php
+├── login.php                    ← Login mit Rate-Limiting
 ├── logout.php
+├── robots.txt                   ← Crawler-Ausschluss
 └── setup.php                    ← Ersteinrichtung
 
 /srv/imapfilter/                 ← Arbeitsdaten (nicht im Repo)
 ├── users.json                   ← Benutzerdatenbank
 ├── dispatcher_state.json        ← Laufzeitzustand des Dispatchers
+├── .login_attempts.json         ← Rate-Limiting-Daten
 └── <benutzername>/
-    ├── config.lua               ← Generiert: IMAP-Verbindung
-    ├── filters.lua              ← Generiert: Filterregeln
-    ├── folders.lua              ← Generiert: Ordner
-    ├── rules.json               ← UI-Regeln
-    ├── imap_settings.json       ← IMAP-Zugangsdaten + Intervall
-    └── backups/                 ← Automatische Sicherungen
+    ├── config.lua               ← Generiert: IMAP-Verbindung (0600)
+    ├── filters.lua              ← Generiert: Filterregeln (0640)
+    ├── folders.lua              ← Generiert: Ordner (0640)
+    ├── rules.json               ← UI-Regeln (0640)
+    ├── imap_settings.json       ← IMAP-Zugangsdaten + Intervall (0600)
+    └── backups/                 ← Automatische Sicherungen (max. 10 pro Datei)
 
 /var/log/imapfilter/             ← Logdateien
 ├── dispatcher.log
+├── login.log                    ← Fehlgeschlagene Login-Versuche
 └── <benutzername>.log
 ```
 
@@ -723,13 +756,22 @@ journalctl -u imapfilter-dispatcher.service -n 30
   Wer von unterwegs zugreifen möchte, verbindet sich zuerst per VPN.
 
 - **Zugangsdaten.** IMAP-Passwörter werden in `imap_settings.json` gespeichert.
-  Die Datei ist nur für `www-data` lesbar und liegt außerhalb des Webroots.
+  Die Datei liegt außerhalb des Webroots und hat `0600`-Berechtigungen (nur `www-data` lesbar).
+  `config.lua` enthält ebenfalls das Passwort und wird ebenfalls mit `0600` geschrieben.
 
 - **Keine Secrets im Repo.** `users.json`, `imap_settings.json` und `rules.json`
   sind in `.gitignore` eingetragen und werden nie ins Repository hochgeladen.
 
-- **Starke Passwörter verwenden.** Mindestens 12 Zeichen, Groß-/Kleinbuchstaben,
-  Zahlen und Sonderzeichen empfohlen.
+- **Passwort-Anforderungen.** Das System erzwingt serverseitig: mindestens 10 Zeichen,
+  Groß-/Kleinbuchstaben, Zahl und Sonderzeichen. Ein Stärke-Indikator hilft beim Wählen.
+
+- **Login-Schutz.** Nach 5 falschen Versuchen wird die IP für 15 Minuten gesperrt.
+  Fehlversuche werden in `/var/log/imapfilter/login.log` protokolliert.
+  Manuelle Entsperrung: `rm /srv/imapfilter/.login_attempts.json`
+
+- **CSRF-Schutz.** Alle schreibenden API-Endpunkte prüfen einen Session-gebundenen Token.
+
+- **Session-Sicherheit.** Cookies werden mit `Secure`, `HttpOnly` und `SameSite=Strict` gesetzt.
 
 - **Regelmäßige Updates.** Nginx, PHP und imapfilter aktuell halten:
   ```bash
@@ -768,8 +810,9 @@ Der Dispatcher kümmert sich automatisch darum, dass auch für diesen Benutzer I
 
 **Wie ändere ich mein Passwort?**
 
-Aktuell nur über den Admin-Account möglich (**🔑 Passwort** in der Benutzerverwaltung).
-Eine „Passwort ändern"-Funktion für normale Benutzer kann auf Wunsch ergänzt werden.
+Über **🔑 Passwort ändern** in der Seitenleiste. Aktuelles Passwort zur Bestätigung eingeben,
+neues Passwort zweimal eingeben. Der Stärke-Indikator zeigt die Qualität des neuen Passworts.
+Admin kann Passwörter anderer Benutzer über die Benutzerverwaltung zurücksetzen.
 
 **Der Dispatcher läuft, aber meine Mails werden nicht sortiert.**
 

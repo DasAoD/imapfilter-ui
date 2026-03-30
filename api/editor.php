@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
+require_once dirname(__DIR__) . '/lib/generate.php';
+require_once dirname(__DIR__) . '/lib/atomic.php';
 header('Content-Type: application/json');
 
 $validFiles = [
@@ -22,12 +24,11 @@ if ($method === 'GET') {
 if ($method === 'POST') {
     $body    = json_decode(file_get_contents('php://input'), true) ?? [];
     $content = $body['content'] ?? '';
-    $backups = $userPaths['backups'];
-    if (file_exists($filePath)) {
-        if (!is_dir($backups)) mkdir($backups, 0770, true);
-        copy($filePath, $backups . '/' . basename($filePath) . '.' . date('Ymd-His') . '.bak');
+    // Backup mit Rotation (max. 10)
+    make_lua_backup($filePath, $userPaths['backups']);
+    if (!atomic_write($filePath, $content, 0640)) {
+        echo json_encode(['ok' => false, 'error' => 'Konnte Datei nicht schreiben.']); exit;
     }
-    if (file_put_contents($filePath, $content) === false) { echo json_encode(['ok' => false, 'error' => 'Konnte Datei nicht schreiben.']); exit; }
     echo json_encode(['ok' => true, 'message' => "Datei '{$validFiles[$fileKey]['label']}' gespeichert."]);
     exit;
 }

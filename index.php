@@ -31,6 +31,7 @@ $isAdmin  = !empty($_SESSION['is_admin']);
 
         <div class="sidebar-section">System</div>
         <a class="nav-item" data-view="settings" href="#settings"><i class="icon">🔌</i> IMAP-Einstellungen</a>
+        <a class="nav-item" data-view="password" href="#password"><i class="icon">🔑</i> Passwort ändern</a>
         <?php if ($isAdmin): ?>
         <a class="nav-item" data-view="admin"      href="#admin">   <i class="icon">👤</i> Benutzerverwaltung</a>
         <a class="nav-item" data-view="dispatcher" href="#dispatcher"><i class="icon">🕐</i> Dispatcher</a>
@@ -145,6 +146,15 @@ $isAdmin  = !empty($_SESSION['is_admin']);
                         <div style="padding-top:6px"><label class="toggle"><input type="checkbox" id="s-ssl" checked><span class="toggle-slider"></span></label></div>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="toggle-row" style="cursor:pointer">
+                        <div>
+                            <div class="toggle-label">SSL-Zertifikat nicht prüfen</div>
+                            <div class="text-sm text-muted">Nur aktivieren wenn der Mailserver ein selbst-signiertes Zertifikat verwendet</div>
+                        </div>
+                        <label class="toggle"><input type="checkbox" id="s-ssl-novalidate"><span class="toggle-slider"></span></label>
+                    </label>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">Benutzername (E-Mail)</label>
@@ -251,7 +261,31 @@ chmod 644 /etc/cron.d/imapfilter-dispatcher</pre>
         </div>
         <?php endif; ?>
 
-        <!-- Admin + Dispatcher views -->
+        <!-- Password change view (all users) -->
+        <div id="view-password" class="view" hidden>
+            <div class="view-header">
+                <h1 class="view-title">Passwort ändern</h1>
+            </div>
+            <div class="card" style="max-width:480px">
+                <div class="card-title">🔑 Neues Passwort setzen</div>
+                <div class="form-group">
+                    <label class="form-label">Aktuelles Passwort</label>
+                    <input type="password" class="form-input" id="cp-current" autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Neues Passwort</label>
+                    <input type="password" class="form-input" id="cp-new" autocomplete="new-password"
+                           oninput="App.pwdCheck('cp-new')">
+                    <div id="cp-strength"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Neues Passwort wiederholen</label>
+                    <input type="password" class="form-input" id="cp-new2" autocomplete="new-password">
+                </div>
+                <div id="cp-status" style="margin-bottom:12px"></div>
+                <button class="btn btn-primary" onclick="App.changePassword()">💾 Passwort ändern</button>
+            </div>
+        </div>
         <?php if ($isAdmin): ?>
         <div id="view-admin" class="view" hidden>
             <div class="view-header">
@@ -289,6 +323,7 @@ chmod 644 /etc/cron.d/imapfilter-dispatcher</pre>
 <script>
     window.CURRENT_USER  = <?= json_encode($username) ?>;
     window.IS_ADMIN      = <?= json_encode($isAdmin) ?>;
+    window.CSRF_TOKEN    = <?= json_encode($_SESSION['csrf_token']) ?>;
 </script>
 <script src="assets/app.js"></script>
 </body>

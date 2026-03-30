@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
 require_once dirname(__DIR__) . '/lib/generate.php';
+require_once dirname(__DIR__) . '/lib/atomic.php';
 header('Content-Type: application/json');
 
 $rulesJson = $userPaths['rules'];
@@ -30,7 +31,7 @@ if ($method === 'POST') {
     unset($rule);
     $body['version'] = 1;
 
-    if (file_put_contents($rulesJson, json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) === false) {
+    if (atomic_write_json($rulesJson, $body, 0640) === false) {
         echo json_encode(['ok' => false, 'error' => 'Konnte rules.json nicht speichern.']); exit;
     }
 
