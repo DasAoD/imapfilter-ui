@@ -234,6 +234,18 @@ Cron-Job anlegen: `* * * * *` → `/usr/bin/php /var/www/imapfilter-ui/cron/disp
 
 ---
 
+## Mitwirkende
+
+Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 4.5) von [Anthropic](https://anthropic.com) entwickelt.  
+Der überwiegende Teil des Codes, der Architektur und der Dokumentation wurde durch KI generiert und iterativ verfeinert.
+
+| Rolle | Person / Tool |
+|---|---|
+| Projektidee & Anforderungen | [DasAoD](https://github.com/DasAoD) |
+| Code, Architektur, Dokumentation | Claude (Anthropic) |
+
+---
+
 ## License
 
 [MIT](LICENSE)

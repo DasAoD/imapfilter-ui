@@ -777,3 +777,15 @@ Eine „Passwort ändern"-Funktion für normale Benutzer kann auf Wunsch ergänz
 2. Falls ja: **⚡ Lua generieren** ausführen
 3. Manuellen Testlauf starten: **▶️ Ausführen** → **„▶ imapfilter starten"**
 4. Fehlermeldungen im Log prüfen
+
+---
+
+## Mitwirkende
+
+Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 4.5) von [Anthropic](https://anthropic.com) entwickelt.  
+Der überwiegende Teil des Codes, der Architektur und der Dokumentation wurde durch KI generiert und iterativ verfeinert.
+
+| Rolle | Person / Tool |
+|---|---|
+| Projektidee & Anforderungen | [DasAoD](https://github.com/DasAoD) |
+| Code, Architektur, Dokumentation | Claude (Anthropic) |
