@@ -76,7 +76,15 @@ function update_password(string $username, string $new_password): bool {
  */
 function user_dir(string $username): string {
     global $luaBaseDir;
-    $dir = rtrim($luaBaseDir, '/') . '/' . $username;
+    $base = rtrim(realpath($luaBaseDir) ?: $luaBaseDir, '/');
+    $dir  = $base . '/' . $username;
+
+    // Sicherstellen dass der Pfad wirklich unter $luaBaseDir liegt
+    $real = realpath($dir) ?: $dir;
+    if (strpos($real . '/', $base . '/') !== 0) {
+        throw new RuntimeException("Ungültiger Benutzerpfad: $dir");
+    }
+
     if (!is_dir($dir)) {
         mkdir($dir . '/backups', 0770, true);
     }

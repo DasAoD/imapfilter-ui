@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
-require_once dirname(__DIR__) . '/lib/generate.php';
+require_once dirname(__DIR__, 2) . '/lib/generate.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

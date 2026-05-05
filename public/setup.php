@@ -1,14 +1,42 @@
 <?php
 /**
- * setup.php — Wird automatisch aufgerufen wenn noch kein Benutzer existiert.
- * Legt den ersten Admin-Account an und leitet danach zu login.php weiter.
+ * setup.php — Ersteinrichtung des ersten Admin-Accounts.
+ * Nur erreichbar wenn /srv/imapfilter/.allow_setup existiert.
  */
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/lib/users.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../lib/users.php';
+require_once __DIR__ . '/../lib/atomic.php';
 
-// Wenn bereits Benutzer vorhanden → direkt zu Login
+$allowFile = rtrim($luaBaseDir, '/') . '/.allow_setup';
+
+// Wenn bereits Benutzer vorhanden → zu Login, Freigabe-Datei aufräumen
 if (!empty(load_users())) {
+    if (file_exists($allowFile)) @unlink($allowFile);
     header('Location: login.php');
+    exit;
+}
+
+// Keine Benutzer, aber auch keine Freigabe → Setup gesperrt
+if (!file_exists($allowFile)) {
+    http_response_code(403);
+    ?>
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><title>Setup gesperrt — IMAPFilter</title>
+<link rel="stylesheet" href="assets/style.css"></head>
+<body>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center">
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px;width:440px;text-align:center">
+    <div style="font-size:2rem;margin-bottom:12px">🔒</div>
+    <div style="font-size:1rem;font-weight:600;margin-bottom:8px">Setup nicht verfügbar</div>
+    <p class="text-muted text-sm">Um die Ersteinrichtung zu starten, bitte auf dem Server ausführen:</p>
+    <pre style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:10px;margin-top:12px;font-size:.8rem;text-align:left">touch <?= htmlspecialchars(rtrim($luaBaseDir, '/')) ?>/.allow_setup</pre>
+    <p class="text-muted text-sm" style="margin-top:12px">Danach diese Seite neu laden.</p>
+</div>
+</div>
+</body>
+</html>
+    <?php
     exit;
 }
 
@@ -21,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($user === '') {
         $error = 'Bitte einen Benutzernamen eingeben.';
-    } elseif (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $user)) {
-        $error = 'Benutzername darf nur Buchstaben, Zahlen, Bindestrich, Punkt und Unterstrich enthalten.';
+    } elseif (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_\-]{1,30}$/', $user)) {
+        $error = 'Benutzername darf nur Buchstaben, Zahlen, Bindestrich und Unterstrich enthalten (2–31 Zeichen, muss mit Buchstabe/Zahl beginnen).';
     } elseif (strlen($pass) < 10) {
         $error = 'Passwort muss mindestens 10 Zeichen lang sein.';
     } elseif (!preg_match('/[A-Z]/', $pass) || !preg_match('/[a-z]/', $pass) ||

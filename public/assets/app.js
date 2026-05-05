@@ -157,6 +157,16 @@ const App = {
             .replace(/'/g,'&#039;');
     },
 
+    // JS-String-Escaping für data-Attribute die per JS ausgelesen werden
+    jsesc(s) {
+        return String(s)
+            .replace(/\\/g,'\\\\')
+            .replace(/'/g,"\\'")
+            .replace(/"/g,'\\"')
+            .replace(/\n/g,'\\n')
+            .replace(/\r/g,'\\r');
+    },
+
     // ═══════════════════════════════════════════════════════════════════════════
     // RULES VIEW
     // ═══════════════════════════════════════════════════════════════════════════
@@ -197,7 +207,7 @@ const App = {
 
     buildSpamCard() {
         const s   = this.state.rules.spam || {};
-        const wl  = (s.whitelist || []).map(w => `<span class="tag">${this.esc(w)}<button class="tag-remove" onclick="App.removeWhitelistEntry('${this.esc(w)}')" title="Entfernen">×</button></span>`).join('');
+        const wl  = (s.whitelist || []).map(w => `<span class="tag" data-action="remove-whitelist" data-val="${this.esc(w)}">${this.esc(w)}<button class="tag-remove" title="Entfernen">×</button></span>`).join('');
         const en  = s.enabled ? 'checked' : '';
         return `
 <div class="card" id="spam-card">
@@ -266,9 +276,9 @@ const App = {
   </div>
   <span class="rule-target">📁 ${this.esc(r.target || '?')}</span>
   <div class="rule-actions">
-    <button class="btn btn-sm btn-secondary btn-icon" title="${r.enabled === false ? 'Aktivieren' : 'Deaktivieren'}" onclick="App.toggleRule(${i})">${enIcon}</button>
-    <button class="btn btn-sm btn-secondary btn-icon" title="Bearbeiten" onclick="App.openRuleModal(${i})">✏️</button>
-    <button class="btn btn-sm btn-danger btn-icon" title="Löschen" onclick="App.deleteRule(${i})">🗑</button>
+    <button class="btn btn-sm btn-secondary btn-icon" title="${r.enabled === false ? 'Aktivieren' : 'Deaktivieren'}" data-action="toggle-rule" data-idx="${i}">${enIcon}</button>
+    <button class="btn btn-sm btn-secondary btn-icon" title="Bearbeiten" data-action="edit-rule" data-idx="${i}">✏️</button>
+    <button class="btn btn-sm btn-danger btn-icon"    title="Löschen"    data-action="delete-rule" data-idx="${i}">🗑</button>
   </div>
 </div>`;
             });
@@ -343,9 +353,9 @@ const App = {
             ? this.state.folders.map(f => `<option value="${this.esc(f)}" ${f === rule.target ? 'selected' : ''}>${this.esc(f)}</option>`).join('')
             : `<option value="${this.esc(rule.target)}">${this.esc(rule.target || 'Kein Ordner')}</option>`;
 
-        const fromTags  = (rule.from_addresses || []).map(a => `<span class="tag" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" onclick="App._modalRemoveTag('from','${this.esc(a)}')">×</button></span>`).join('');
-        const toTags    = (rule.to_addresses   || []).map(a => `<span class="tag" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" onclick="App._modalRemoveTag('to','${this.esc(a)}')">×</button></span>`).join('');
-        const subjTags  = (rule.subjects || []).map(s => `<span class="tag" data-val="${this.esc(s)}">${this.esc(s)}<button class="tag-remove" onclick="App._modalRemoveTag('subj','${this.esc(s)}')">×</button></span>`).join('');
+        const fromTags  = (rule.from_addresses || []).map(a => `<span class="tag" data-action="remove-tag" data-type="from" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove">×</button></span>`).join('');
+        const toTags    = (rule.to_addresses   || []).map(a => `<span class="tag" data-action="remove-tag" data-type="to"   data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove">×</button></span>`).join('');
+        const subjTags  = (rule.subjects || []).map(s => `<span class="tag" data-action="remove-tag" data-type="subj" data-val="${this.esc(s)}">${this.esc(s)}<button class="tag-remove">×</button></span>`).join('');
 
         const body = `
 <div class="form-group">
@@ -446,8 +456,10 @@ const App = {
             existing.add(val);
             const tag = document.createElement('span');
             tag.className = 'tag';
-            tag.dataset.val = val;
-            tag.innerHTML = `${this.esc(val)}<button class="tag-remove" onclick="App._modalRemoveTag('${type}','${this.esc(val)}')">×</button>`;
+            tag.dataset.val    = val;
+            tag.dataset.action = 'remove-tag';
+            tag.dataset.type   = type;
+            tag.innerHTML = `${this.esc(val)}<button class="tag-remove">×</button>`;
             container.appendChild(tag);
         });
 
@@ -607,8 +619,8 @@ const App = {
             const isInbox  = f === 'INBOX';
             const actions  = isInbox ? '' : `
   <div style="display:flex;gap:6px;margin-left:auto">
-    <button class="btn btn-sm btn-secondary btn-icon" title="Umbenennen" onclick="App.openRenameFolderModal('${this.esc(f)}')">✏️</button>
-    <button class="btn btn-sm btn-danger btn-icon"    title="Löschen"    onclick="App.openDeleteFolderModal('${this.esc(f)}')">🗑</button>
+    <button class="btn btn-sm btn-secondary btn-icon" title="Umbenennen" data-action="rename-folder" data-name="${this.esc(f)}">✏️</button>
+    <button class="btn btn-sm btn-danger btn-icon"    title="Löschen"    data-action="delete-folder" data-name="${this.esc(f)}">🗑</button>
   </div>`;
             return `<div class="folder-item${cls}" style="justify-content:space-between"><div style="display:flex;align-items:center;gap:8px"><span class="folder-icon">${icon}</span>${this.esc(f)}</div>${actions}</div>`;
         }).join('');
@@ -924,9 +936,9 @@ const App = {
     <div class="rule-meta">/srv/imapfilter/${this.esc(u.username)}/</div>
   </div>
   <div class="rule-actions">
-    <button class="btn btn-sm btn-secondary" onclick="App.openResetPasswordModal('${this.esc(u.username)}')">🔑 Passwort</button>
+    <button class="btn btn-sm btn-secondary" data-action="reset-password" data-username="${this.esc(u.username)}">🔑 Passwort</button>
     ${u.username !== window.CURRENT_USER
-        ? `<button class="btn btn-sm btn-danger" onclick="App.deleteUser('${this.esc(u.username)}')">🗑 Löschen</button>`
+        ? `<button class="btn btn-sm btn-danger" data-action="delete-user" data-username="${this.esc(u.username)}">🗑 Löschen</button>`
         : ''}
   </div>
 </div>`).join('');
@@ -963,7 +975,7 @@ const App = {
         const is_admin  = document.getElementById('nu-admin').checked;
 
         if (!username)             { this.toast('Benutzername eingeben.', 'warn'); return; }
-        if (!/^[a-zA-Z0-9_\-\.]+$/.test(username)) { this.toast('Ungültige Zeichen im Benutzernamen.', 'warn'); return; }
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_\-]{1,30}$/.test(username)) { this.toast('Benutzername ungültig (2–31 Zeichen, Buchstaben/Zahlen/Bindestrich/Unterstrich, muss mit Buchstabe/Zahl beginnen).', 'warn'); return; }
 
         const errs = this.pwdValidate(password);
         if (errs.length) { this.toast('Passwort benötigt: ' + errs.join(', ') + '.', 'warn'); return; }
@@ -1127,7 +1139,7 @@ const App = {
 
 };
 
-// Close modal on overlay click
+// ─── Zentraler Event-Delegator ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('modal-overlay').addEventListener('click', e => {
         if (e.target === document.getElementById('modal-overlay')) App.closeModal();
@@ -1135,5 +1147,56 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') App.closeModal();
     });
+
+    // Alle data-action Klicks zentral abhandeln
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        e.preventDefault();
+        const action = btn.dataset.action;
+
+        switch (action) {
+            // Whitelist
+            case 'remove-whitelist': {
+                const tag = btn.closest('.tag');
+                const val = tag?.dataset.val;
+                if (val) App.removeWhitelistEntry(val);
+                break;
+            }
+            // Modal-Tags (Von/An/Betreff)
+            case 'remove-tag': {
+                const tag  = btn.closest('.tag');
+                const type = tag?.dataset.type;
+                const val  = tag?.dataset.val;
+                if (type && val) App._modalRemoveTag(type, val);
+                break;
+            }
+            // Regelaktionen
+            case 'toggle-rule':
+                App.toggleRule(parseInt(btn.dataset.idx, 10));
+                break;
+            case 'edit-rule':
+                App.openRuleModal(parseInt(btn.dataset.idx, 10));
+                break;
+            case 'delete-rule':
+                App.deleteRule(parseInt(btn.dataset.idx, 10));
+                break;
+            // Ordneraktionen
+            case 'rename-folder':
+                App.openRenameFolderModal(btn.dataset.name);
+                break;
+            case 'delete-folder':
+                App.openDeleteFolderModal(btn.dataset.name);
+                break;
+            // Benutzeraktionen
+            case 'reset-password':
+                App.openResetPasswordModal(btn.dataset.username);
+                break;
+            case 'delete-user':
+                App.deleteUser(btn.dataset.username);
+                break;
+        }
+    });
+
     App.init();
 });

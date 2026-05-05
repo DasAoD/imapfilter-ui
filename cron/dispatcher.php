@@ -82,8 +82,24 @@ foreach ($users as $user) {
     }
 
     // imapfilter starten
-    $logFile = rtrim($logDir, '/') . '/' . $username . '.log';
-    $cmd     = 'HOME=/tmp '
+    $logFile  = rtrim($logDir, '/') . '/' . $username . '.log';
+    $lockFile = rtrim($logDir, '/') . '/' . $username . '.lock';
+
+    // Lockfile prüfen — läuft noch ein Prozess?
+    if (file_exists($lockFile)) {
+        $pid = (int)file_get_contents($lockFile);
+        if ($pid > 0 && file_exists('/proc/' . $pid)) {
+            dispatcher_log("[$username] Überspringe — Lauf #$pid noch aktiv.");
+            continue;
+        }
+        // Veraltetes Lockfile entfernen
+        @unlink($lockFile);
+    }
+
+    // Lockfile anlegen
+    file_put_contents($lockFile, getmypid());
+
+    $cmd     = 'HOME=/tmp timeout 120 '
              . escapeshellarg($imapfilterBin)
              . ' -c ' . escapeshellarg($paths['config'])
              . ' >> ' . escapeshellarg($logFile)
@@ -93,6 +109,7 @@ foreach ($users as $user) {
     $start = microtime(true);
     exec($cmd, $output, $code);
     $duration = round(microtime(true) - $start, 1);
+    @unlink($lockFile);
 
     if ($code === 0) {
         dispatcher_log("[$username] Fertig in {$duration}s (Exit: 0).");

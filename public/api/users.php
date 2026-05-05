@@ -75,7 +75,10 @@ if ($method === 'POST' && $action === 'create') {
     $is_admin = !empty($body['is_admin']);
 
     if ($username === '') { echo json_encode(['ok' => false, 'error' => 'Kein Benutzername angegeben.']); exit; }
-    if (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $username)) { echo json_encode(['ok' => false, 'error' => 'Benutzername enthält ungültige Zeichen.']); exit; }
+    if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_\-]{1,30}$/', $username)) {
+        echo json_encode(['ok' => false, 'error' => 'Benutzername ungültig (2–31 Zeichen, nur Buchstaben/Zahlen/Bindestrich/Unterstrich, muss mit Buchstabe/Zahl beginnen).']);
+        exit;
+    }
     $pwdErr = validate_password($password);
     if ($pwdErr) { echo json_encode(['ok' => false, 'error' => $pwdErr]); exit; }
     if (user_exists($username)) { echo json_encode(['ok' => false, 'error' => "Benutzer '$username' existiert bereits."]); exit; }

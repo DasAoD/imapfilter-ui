@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
-require_once dirname(__DIR__) . '/lib/generate.php';
-require_once dirname(__DIR__) . '/lib/atomic.php';
+require_once dirname(__DIR__, 2) . '/lib/generate.php';
+require_once dirname(__DIR__, 2) . '/lib/atomic.php';
 header('Content-Type: application/json');
 
 $validFiles = [

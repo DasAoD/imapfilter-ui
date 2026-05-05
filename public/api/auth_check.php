@@ -1,6 +1,6 @@
 <?php
-require_once dirname(__DIR__) . '/config.php';
-require_once dirname(__DIR__) . '/lib/users.php';
+require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/users.php';
 session_start();
 
 if (empty($_SESSION['imapfilter_logged_in'])) {

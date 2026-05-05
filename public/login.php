@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/lib/users.php';
-require_once __DIR__ . '/lib/atomic.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../lib/users.php';
+require_once __DIR__ . '/../lib/atomic.php';
 
 // Cookie-Flags vor session_start setzen
 session_set_cookie_params([
@@ -13,9 +13,16 @@ session_set_cookie_params([
 ]);
 session_start();
 
-// Noch kein Benutzer → Setup
+// Noch kein Benutzer → nur zu Setup wenn Freigabe-Datei vorhanden
 if (empty(load_users())) {
-    header('Location: setup.php');
+    $allowFile = rtrim($luaBaseDir, '/') . '/.allow_setup';
+    if (file_exists($allowFile)) {
+        header('Location: setup.php');
+    } else {
+        // Keine Benutzer, kein Setup-Token → Fehlerseite
+        http_response_code(503);
+        die('Keine Benutzer konfiguriert. Bitte Administrator kontaktieren.');
+    }
     exit;
 }
 
