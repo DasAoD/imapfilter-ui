@@ -36,7 +36,7 @@ Unterstützt mehrere Benutzer — jeder mit eigenem Mailkonto, eigenen Regeln un
 - Atomare Schreiboperationen für alle JSON- und Lua-Dateien
 - Strikte Dateiberechtigungen (`config.lua` und `imap_settings.json` mit `0600`)
 - TLS-Zertifikatsprüfung standardmäßig aktiv
-- `cron/` und `lib/` per Nginx gesperrt
+- `lib/`, `cron/` und `config.php` liegen außerhalb des Webroots (`public/`) und sind nicht per Browser erreichbar
 
 ---
 
@@ -106,7 +106,7 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    root  /var/www/imapfilter-ui;
+    root  /var/www/imapfilter-ui/public;
     index index.php;
 
     access_log /var/log/nginx/imapfilter.example.com.access.log;
@@ -131,10 +131,6 @@ server {
 
     # Versteckte Dateien sperren
     location ~ /\.ht { deny all; }
-
-    # CLI-Verzeichnisse sperren
-    location ^~ /cron/ { deny all; }
-    location ^~ /lib/  { deny all; }
 }
 ```
 
@@ -197,19 +193,26 @@ Cron-Job anlegen: `* * * * *` → `/usr/bin/php /var/www/imapfilter-ui/cron/disp
 
 ```
 /var/www/imapfilter-ui/
-├── api/
-│   ├── auth_check.php    # API-Authentifizierung + CSRF-Prüfung
-│   ├── dispatcher.php    # Dispatcher-Status + Intervall-API
-│   ├── editor.php        # Lua-Dateien lesen/schreiben
-│   ├── folders.php       # IMAP-Ordner anzeigen / anlegen / umbenennen / löschen
-│   ├── generate.php      # Lua + config.lua aus JSON generieren
-│   ├── rules.php         # Regeln CRUD + Auto-Generate
-│   ├── run.php           # imapfilter ausführen / Log lesen
-│   ├── settings.php      # IMAP-Einstellungen
-│   └── users.php         # Benutzerverwaltung (Admin + eigenes Passwort)
-├── assets/
-│   ├── app.js            # Frontend-Anwendungslogik
-│   └── style.css         # Dark-Theme CSS
+├── public/                            ← Nginx-Webroot
+│   ├── api/
+│   │   ├── auth_check.php    # API-Authentifizierung + CSRF-Prüfung
+│   │   ├── dispatcher.php    # Dispatcher-Status + Intervall-API
+│   │   ├── editor.php        # Lua-Dateien lesen/schreiben
+│   │   ├── folders.php       # IMAP-Ordner anzeigen / anlegen / umbenennen / löschen
+│   │   ├── generate.php      # Lua + config.lua aus JSON generieren
+│   │   ├── rules.php         # Regeln CRUD + Auto-Generate
+│   │   ├── run.php           # imapfilter ausführen / Log lesen
+│   │   ├── settings.php      # IMAP-Einstellungen
+│   │   └── users.php         # Benutzerverwaltung (Admin + eigenes Passwort)
+│   ├── assets/
+│   │   ├── app.js            # Frontend-Anwendungslogik
+│   │   └── style.css         # Dark-Theme CSS
+│   ├── auth.php              # Session-Check (Redirect)
+│   ├── index.php             # Haupt-UI-Shell
+│   ├── login.php             # Loginseite (mit Rate-Limiting)
+│   ├── logout.php            # Logout
+│   ├── robots.txt            # Crawler-Ausschluss
+│   └── setup.php             # Ersteinrichtung (Admin-Account)
 ├── cron/
 │   ├── dispatcher.php                 # Zentrales Dispatcher-Skript (nur CLI)
 │   ├── imapfilter-dispatcher.service  # systemd Service
@@ -219,13 +222,7 @@ Cron-Job anlegen: `* * * * *` → `/usr/bin/php /var/www/imapfilter-ui/cron/disp
 │   ├── atomic.php        # Atomare Schreiboperationen
 │   ├── generate.php      # Lua-Generierungslogik (geteilt)
 │   └── users.php         # Benutzerverwaltungs-Funktionen
-├── auth.php              # Session-Check (Redirect)
-├── config.php            # Konfiguration (Pfade)
-├── index.php             # Haupt-UI-Shell
-├── login.php             # Loginseite (mit Rate-Limiting)
-├── logout.php            # Logout
-├── robots.txt            # Crawler-Ausschluss
-└── setup.php             # Ersteinrichtung (Admin-Account)
+└── config.php            # Konfiguration (Pfade) — außerhalb des Webroots
 
 /srv/imapfilter/
 ├── users.json                 # Benutzerdatenbank (nicht im Repo)

@@ -212,7 +212,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/imapfilter.beispiel.de/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/imapfilter.beispiel.de/privkey.pem;
 
-    root  /var/www/imapfilter-ui;
+    root  /var/www/imapfilter-ui/public;
     index index.php;
 
     # ── Zugriff nur aus LAN / VPN ──────────────────────────────────────────────
@@ -699,20 +699,27 @@ journalctl -u imapfilter-dispatcher.service -n 30
 ## 15. Dateistruktur (Übersicht)
 
 ```
-/var/www/imapfilter-ui/          ← Web-UI (Webroot)
-├── api/                         ← Backend-API (PHP)
-│   ├── auth_check.php           ← Session-Check + CSRF-Prüfung
-│   ├── dispatcher.php
-│   ├── editor.php
-│   ├── folders.php              ← Ordner anzeigen/anlegen/umbenennen/löschen
-│   ├── generate.php
-│   ├── rules.php
-│   ├── run.php
-│   ├── settings.php
-│   └── users.php
-├── assets/
-│   ├── app.js                   ← Frontend-Logik
-│   └── style.css                ← Design
+/var/www/imapfilter-ui/          ← Projektverzeichnis
+├── public/                      ← Nginx-Webroot
+│   ├── api/                     ← Backend-API (PHP)
+│   │   ├── auth_check.php       ← Session-Check + CSRF-Prüfung
+│   │   ├── dispatcher.php
+│   │   ├── editor.php
+│   │   ├── folders.php          ← Ordner anzeigen/anlegen/umbenennen/löschen
+│   │   ├── generate.php
+│   │   ├── rules.php
+│   │   ├── run.php
+│   │   ├── settings.php
+│   │   └── users.php
+│   ├── assets/
+│   │   ├── app.js               ← Frontend-Logik
+│   │   └── style.css            ← Design
+│   ├── auth.php
+│   ├── index.php                ← Haupt-UI
+│   ├── login.php                ← Login mit Rate-Limiting
+│   ├── logout.php
+│   ├── robots.txt               ← Crawler-Ausschluss
+│   └── setup.php                ← Ersteinrichtung
 ├── cron/
 │   ├── dispatcher.php           ← Dispatcher-Skript (nur CLI)
 │   ├── imapfilter-dispatcher.service  ← systemd Service
@@ -722,13 +729,7 @@ journalctl -u imapfilter-dispatcher.service -n 30
 │   ├── atomic.php               ← Atomare Schreiboperationen
 │   ├── generate.php             ← Lua-Generierungslogik
 │   └── users.php                ← Benutzerverwaltungs-Funktionen
-├── auth.php
-├── config.php                   ← Konfiguration (Pfade)
-├── index.php                    ← Haupt-UI
-├── login.php                    ← Login mit Rate-Limiting
-├── logout.php
-├── robots.txt                   ← Crawler-Ausschluss
-└── setup.php                    ← Ersteinrichtung
+└── config.php                   ← Konfiguration (Pfade) — außerhalb des Webroots
 
 /srv/imapfilter/                 ← Arbeitsdaten (nicht im Repo)
 ├── users.json                   ← Benutzerdatenbank
