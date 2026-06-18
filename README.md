@@ -134,8 +134,8 @@ server {
 }
 ```
 
-> **Hinweis:** Falls das UI nur aus dem LAN/VPN erreichbar sein soll, können in den
-> `location`-Blöcken `allow`/`deny`-Regeln ergänzt werden.
+> **HinweisA Gfalls das UI nur aus dem LAN/VPN erreichbar sein soll, können in den
+> `location`-Blössken `allow`/`deny`-Regeln ergänzt werden.
 
 Aktivieren und neu laden:
 
@@ -163,7 +163,7 @@ Weitere Benutzer werden im Admin-Bereich (👤 Benutzerverwaltung) angelegt.
 Der Dispatcher ist ein zentrales PHP-Skript, das einmal pro Minute aufgerufen wird und
 für jeden Benutzer prüft, ob sein eingestelltes Intervall abgelaufen ist.
 
-**Nur einmalig einrichten** — neue Benutzer werden automatisch berücksichtigt.
+**Nur einmalig einrichten** — geue Benutzer werden automatisch berücksichtigt.
 
 ### systemd (empfohlen)
 
@@ -189,72 +189,6 @@ Cron-Job anlegen: `* * * * *` → `/usr/bin/php /var/www/imapfilter-ui/cron/disp
 
 ---
 
-## Dateistruktur
-
-```
-/var/www/imapfilter-ui/
-├── public/                            ← Nginx-Webroot
-│   ├── api/
-│   │   ├── auth_check.php    # API-Authentifizierung + CSRF-Prüfung
-│   │   ├── dispatcher.php    # Dispatcher-Status + Intervall-API
-│   │   ├── editor.php        # Lua-Dateien lesen/schreiben
-│   │   ├── folders.php       # IMAP-Ordner anzeigen / anlegen / umbenennen / löschen
-│   │   ├── generate.php      # Lua + config.lua aus JSON generieren
-│   │   ├── rules.php         # Regeln CRUD + Auto-Generate
-│   │   ├── run.php           # imapfilter ausführen / Log lesen
-│   │   ├── settings.php      # IMAP-Einstellungen
-│   │   └── users.php         # Benutzerverwaltung (Admin + eigenes Passwort)
-│   ├── assets/
-│   │   ├── app.js            # Frontend-Anwendungslogik
-│   │   └── style.css         # Dark-Theme CSS
-│   ├── auth.php              # Session-Check (Redirect)
-│   ├── index.php             # Haupt-UI-Shell
-│   ├── login.php             # Loginseite (mit Rate-Limiting)
-│   ├── logout.php            # Logout
-│   ├── robots.txt            # Crawler-Ausschluss
-│   └── setup.php             # Ersteinrichtung (Admin-Account)
-├── cron/
-│   ├── dispatcher.php                 # Zentrales Dispatcher-Skript (nur CLI)
-│   ├── imapfilter-dispatcher.service  # systemd Service
-│   ├── imapfilter-dispatcher.timer    # systemd Timer
-│   └── imapfilter-dispatcher.cron     # Cron-Datei für /etc/cron.d/
-├── lib/
-│   ├── atomic.php        # Atomare Schreiboperationen
-│   ├── generate.php      # Lua-Generierungslogik (geteilt)
-│   └── users.php         # Benutzerverwaltungs-Funktionen
-└── config.php            # Konfiguration (Pfade) — außerhalb des Webroots
-
-/srv/imapfilter/
-├── users.json                 # Benutzerdatenbank (nicht im Repo)
-├── dispatcher_state.json      # Laufzeitzustand des Dispatchers
-├── .login_attempts.json       # Rate-Limiting-Daten (automatisch)
-└── <username>/
-    ├── config.lua             # Generiert: IMAP-Verbindung + dofile-Includes (0600)
-    ├── filters.lua            # Generiert: Filterregeln (0640)
-    ├── folders.lua            # Generiert: Ordner-Referenzen (0640)
-    ├── rules.json             # UI-Regeln (nicht im Repo, 0640)
-    ├── imap_settings.json     # IMAP-Zugangsdaten + Intervall (nicht im Repo, 0600)
-    └── backups/               # Automatische Backups (max. 10 pro Datei)
-
-/var/log/imapfilter/
-├── dispatcher.log        # Dispatcher-Protokoll
-├── login.log             # Login-Fehlversuche
-└── <username>.log        # imapfilter-Ausgabe pro Benutzer
-```
-
----
-
-## Sicherheitshinweise
-
-- `users.json`, `rules.json` und `imap_settings.json` sind im `.gitignore`
-- `imap_settings.json` und `config.lua` enthalten das IMAP-Passwort — werden mit `0600` geschrieben
-- Login Rate-Limiting: 5 Fehlversuche → 15 Min. Sperre; Fehlversuche werden in `login.log` protokolliert
-- CSRF-Token wird bei jedem Login neu generiert und bei allen schreibenden API-Aufrufen geprüft
-- Passwort-Anforderungen werden client- und serverseitig erzwungen
-- Niemals systemd-Timer und Cron gleichzeitig für den Dispatcher betreiben
-
----
-
 ## Mitwirkende
 
 Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 4.5) von [Anthropic](https://anthropic.com) entwickelt.  
@@ -262,8 +196,8 @@ Der überwiegende Teil des Codes, der Architektur und der Dokumentation wurde du
 
 | Rolle | Person / Tool |
 |---|---|
-| Projektidee & Anforderungen | [DasAoD](https://github.com/DasAoD) |
-| Code, Architektur, Dokumentation | Claude (Anthropic) |
+| Projektidee & Anforderungen | [DasAoD](https://git.uliana.de/DasAoD) |
+| Code, Architektur, Dokumentation | [Claude](https://git.uliana.de/Claude) (Anthropic) |
 
 ---
 
