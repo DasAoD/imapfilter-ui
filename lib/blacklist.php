@@ -145,11 +145,13 @@ function sync_spam_blacklist(array $paths): array {
     // PHP, ohne Absender-/Message-ID-Daten in eine IMAP-SEARCH-Query einzubetten.
     $toRemove    = [];
     $carryOver   = []; // konnten nicht geprüft werden → nächsten Lauf erneut versuchen
-    $disappeared = array_diff_key($previous, $current);
+    $disappeared  = array_diff_key($previous, $current);
+    $maxInboxScan = 5000; // Obergrenze, um bei sehr großen Postfächern nicht jeden Lauf zu blockieren
     if (!empty($disappeared)) {
-        if (@imap_reopen($imap, $conn['mbox'] . 'INBOX')) {
-            $inboxCount = @imap_num_msg($imap) ?: 0;
-            $inboxIds   = [];
+        $inboxOk = @imap_reopen($imap, $conn['mbox'] . 'INBOX');
+        $inboxCount = $inboxOk ? (@imap_num_msg($imap) ?: 0) : 0;
+        if ($inboxOk && $inboxCount <= $maxInboxScan) {
+            $inboxIds = [];
             if ($inboxCount > 0) {
                 $inboxOverviews = imap_fetch_overview($imap, '1:' . $inboxCount) ?: [];
                 foreach ($inboxOverviews as $iov) {
@@ -167,9 +169,10 @@ function sync_spam_blacklist(array $paths): array {
                 // sonst: Nachricht endgültig verschwunden (gelöscht/anderer Ordner) → nicht weiter tracken
             }
         } else {
-            // INBOX konnte nicht geprüft werden (z. B. Verbindungsproblem) — betroffene
-            // Nachrichten im Zustand behalten, statt den Absender fälschlich dauerhaft
-            // gesperrt zu lassen; im nächsten Lauf wird erneut geprüft.
+            // INBOX konnte nicht geprüft werden (z. B. Verbindungsproblem) oder ist für einen
+            // vollständigen Abgleich in diesem Lauf zu groß — betroffene Nachrichten im Zustand
+            // behalten, statt den Absender fälschlich dauerhaft gesperrt zu lassen; im nächsten
+            // Lauf wird erneut geprüft.
             $carryOver = $disappeared;
         }
     }
@@ -190,7 +193,10 @@ function sync_spam_blacklist(array $paths): array {
     $lockFile = rtrim($paths['dir'], '/') . '/rules.json.lock';
     with_file_lock($lockFile, function () use ($paths, $toAdd, $toRemove, &$result) {
         $fresh = json_decode(file_get_contents($paths['rules']), true);
-        if (!is_array($fresh)) return;
+        if (!is_array($fresh)) {
+            $result['error'] = 'rules.json ist ungültig oder beschädigt (beim Schreiben der Sperrliste).';
+            return;
+        }
 
         $senders = array_values(array_unique(array_map('mb_strtolower', $fresh['blacklist']['senders'] ?? [])));
         foreach ($toAdd as $addr) {
