@@ -7,7 +7,12 @@ header('Content-Type: application/json');
 $rulesJson = $userPaths['rules'];
 
 function default_rules(): array {
-    return ['version' => 1, 'spam' => ['enabled' => true, 'header_field' => 'X-KasSpamfilter', 'header_value' => 'rSpamD', 'whitelist' => [], 'target' => 'Spam'], 'rules' => []];
+    return [
+        'version'   => 1,
+        'spam'      => ['enabled' => true, 'header_field' => 'X-KasSpamfilter', 'header_value' => 'rSpamD', 'whitelist' => [], 'target' => 'Spam'],
+        'blacklist' => ['enabled' => false, 'senders' => []],
+        'rules'     => [],
+    ];
 }
 
 function read_rules(string $file): array {
@@ -31,7 +36,23 @@ if ($method === 'POST') {
     unset($rule);
     $body['version'] = 1;
 
-    if (atomic_write_json($rulesJson, $body, 0640) === false) {
+    // Sperrliste normalisieren: trimmen, klein schreiben, deduplizieren
+    $bl = $body['blacklist'] ?? ['enabled' => false, 'senders' => []];
+    $senders = array_values(array_unique(array_filter(array_map(
+        fn($s) => mb_strtolower(trim((string)$s)), $bl['senders'] ?? []
+    ))));
+    sort($senders);
+    $body['blacklist'] = ['enabled' => !empty($bl['enabled']), 'senders' => $senders];
+
+    // Unter demselben Lock schreiben wie der Cron-Dispatcher (lib/blacklist.php),
+    // damit sich Web-UI-Speichern und automatischer Sperrlisten-Abgleich nicht
+    // gegenseitig überschreiben.
+    $lockFile = rtrim($userPaths['dir'], '/') . '/rules.json.lock';
+    $written  = false;
+    with_file_lock($lockFile, function () use ($rulesJson, $body, &$written) {
+        $written = atomic_write_json($rulesJson, $body, 0640) !== false;
+    });
+    if (!$written) {
         echo json_encode(['ok' => false, 'error' => 'Konnte rules.json nicht speichern.']); exit;
     }
 

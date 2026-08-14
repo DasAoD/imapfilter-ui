@@ -182,7 +182,7 @@ const App = {
         if (res && res.ok) {
             this.state.rules = res.data;
         } else {
-            this.state.rules = { version: 1, spam: { enabled: true, header_field: 'X-KasSpamfilter', header_value: 'rSpamD', whitelist: [], target: 'Spam' }, rules: [] };
+            this.state.rules = { version: 1, spam: { enabled: true, header_field: 'X-KasSpamfilter', header_value: 'rSpamD', whitelist: [], target: 'Spam' }, blacklist: { enabled: false, senders: [] }, rules: [] };
         }
     },
 
@@ -201,7 +201,7 @@ const App = {
     renderRules() {
         const el = document.getElementById('rules-content');
         if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
-        el.innerHTML = this.buildSpamCard() + this.buildRulesListCard();
+        el.innerHTML = this.buildSpamCard() + this.buildBlacklistCard() + this.buildRulesListCard();
         this.bindRuleDragDrop();
     },
 
@@ -239,6 +239,32 @@ const App = {
         <button class="btn btn-secondary btn-sm" onclick="App.addWhitelistEntry()">+ Hinzufügen</button>
       </div>
     </div>
+  </div>
+</div>`;
+    },
+
+    buildBlacklistCard() {
+        const b   = this.state.rules.blacklist || { enabled: false, senders: [] };
+        const tags = (b.senders || []).map(a => `<span class="tag" data-action="remove-blacklist" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Entfernen">×</button></span>`).join('');
+        const en  = b.enabled ? 'checked' : '';
+        return `
+<div class="card" id="blacklist-card">
+  <div class="card-title">⛔ Sperrliste <span class="badge">Globale Regel</span></div>
+  <div class="toggle-row">
+    <div>
+      <div class="toggle-label">Automatisch lernen</div>
+      <div class="text-muted text-sm">Absender aus dem Spam-Zielordner werden automatisch gesperrt; wandert eine Mail zurück in die INBOX, wird der Absender wieder entsperrt.</div>
+    </div>
+    <label class="toggle"><input type="checkbox" ${en} onchange="App.setBlacklistEnabled(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="form-group" style="margin-top:14px">
+    <label class="form-label">Gesperrte Absender (Mails werden immer in den Spam-Zielordner verschoben)</label>
+    <div class="tag-list" id="blacklist-tags">${tags || '<span class="text-muted text-sm">Keine Einträge</span>'}</div>
+    <div class="tag-input-row" style="margin-top:8px">
+      <input class="form-input" id="bl-input" placeholder="absender@domain.de, …" onkeydown="if(event.key==='Enter'){App.addBlacklistEntry();event.preventDefault()}">
+      <button class="btn btn-secondary btn-sm" onclick="App.addBlacklistEntry()">+ Hinzufügen</button>
+    </div>
+    <p class="text-muted text-sm" style="margin-top:8px">Wirkt unabhängig vom Schalter oben, sobald Einträge vorhanden sind. Whitelist-Einträge haben Vorrang.</p>
   </div>
 </div>`;
     },
@@ -340,6 +366,40 @@ const App = {
 
     removeWhitelistEntry(val) {
         this.state.rules.spam.whitelist = (this.state.rules.spam.whitelist || []).filter(w => w !== val);
+        this.saveRules();
+        this.renderRules();
+    },
+
+    // ── Blacklist helpers ───────────────────────────────────────────────────────
+    setBlacklistEnabled(v) {
+        if (!this.state.rules.blacklist) this.state.rules.blacklist = { enabled: false, senders: [] };
+        this.state.rules.blacklist.enabled = v;
+        this.saveRules();
+    },
+
+    addBlacklistEntry() {
+        const inp = document.getElementById('bl-input');
+        const values = inp.value
+            .split(/[,;\n]+/)
+            .map(v => v.trim().toLowerCase())
+            .filter(v => v.length > 0);
+        if (!values.length) return;
+        if (!this.state.rules.blacklist) this.state.rules.blacklist = { enabled: false, senders: [] };
+        if (!this.state.rules.blacklist.senders) this.state.rules.blacklist.senders = [];
+        let added = false;
+        values.forEach(val => {
+            if (!this.state.rules.blacklist.senders.includes(val)) {
+                this.state.rules.blacklist.senders.push(val);
+                added = true;
+            }
+        });
+        if (added) this.saveRules();
+        inp.value = '';
+        this.renderRules();
+    },
+
+    removeBlacklistEntry(val) {
+        this.state.rules.blacklist.senders = (this.state.rules.blacklist.senders || []).filter(a => a !== val);
         this.saveRules();
         this.renderRules();
     },
@@ -1161,6 +1221,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tag = btn.closest('.tag');
                 const val = tag?.dataset.val;
                 if (val) App.removeWhitelistEntry(val);
+                break;
+            }
+            // Sperrliste
+            case 'remove-blacklist': {
+                const tag = btn.closest('.tag');
+                const val = tag?.dataset.val;
+                if (val) App.removeBlacklistEntry(val);
                 break;
             }
             // Modal-Tags (Von/An/Betreff)

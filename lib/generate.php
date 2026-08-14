@@ -7,6 +7,7 @@
 require_once __DIR__ . '/atomic.php';
 
 function lua_str(string $s): string {
+    $s = preg_replace('/[\x00-\x1F\x7F]/', '', $s); // Steuerzeichen (u.a. CR/LF) entfernen
     $s = str_replace("\\", "\\\\", $s); // erst Backslash
     $s = str_replace("'",  "\\'",  $s); // dann Quote
     return "'" . $s . "'";
@@ -72,16 +73,24 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
         return ['ok' => false, 'error' => 'rules.json ist ungültig.'];
     }
 
-    $spam  = $data['spam']  ?? ['enabled' => false];
-    $rules = $data['rules'] ?? [];
+    $spam      = $data['spam']      ?? ['enabled' => false];
+    $blacklist = $data['blacklist'] ?? ['enabled' => false, 'senders' => []];
+    $rules     = $data['rules']     ?? [];
     $ts    = date('Y-m-d H:i:s');
     $header = "-- Automatisch generiert von IMAPFilter Web-UI am $ts\n"
             . "-- Benutzer: $username\n"
             . "-- NICHT manuell bearbeiten (wird bei Regeländerungen überschrieben).\n";
 
+    // Gesperrte Absender (Sperrliste) — unabhängig vom "automatisch lernen"-Schalter
+    // immer wirksam, sobald Einträge vorhanden sind (vgl. Issue #1).
+    $blSenders = array_values(array_unique(array_filter(array_map(
+        fn($s) => mb_strtolower(trim($s)), $blacklist['senders'] ?? []
+    ))));
+    $blActive  = !empty($blSenders) && !empty($spam['target']) && $spam['target'] !== 'INBOX';
+
     // ── Zielordner sammeln ────────────────────────────────────────────────────
     $targetFolders = [];
-    if (!empty($spam['enabled']) && !empty($spam['target']) && $spam['target'] !== 'INBOX') {
+    if ((!empty($spam['enabled']) || $blActive) && !empty($spam['target']) && $spam['target'] !== 'INBOX') {
         $targetFolders[$spam['target']] = lua_folder_var($spam['target']);
     }
     foreach ($rules as $rule) {
@@ -120,21 +129,33 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
     // ── filters.lua ───────────────────────────────────────────────────────────
     $lines = [$header];
 
-    if (!empty($spam['enabled'])) {
-        $lines[] = "\n-- ─── Spam ───────────────────────────────────────────────────────────────────";
-        $lines[] = "spam_candidates = inbox:contain_field("
-            . lua_str($spam['header_field'] ?? 'X-KasSpamfilter') . ", "
-            . lua_str($spam['header_value'] ?? 'rSpamD') . ")";
-        $wl = array_filter(array_map('trim', $spam['whitelist'] ?? []));
+    $wl = array_filter(array_map('trim', $spam['whitelist'] ?? []));
+    if (!empty($spam['enabled']) || $blActive) {
+        $label   = !empty($spam['enabled']) ? 'Spam' : 'Sperrliste';
+        $lines[] = "\n-- ─── $label ───────────────────────────────────────────────────────────────────";
         if (!empty($wl)) {
             $parts   = array_map(fn($w) => "    inbox:contain_from(" . lua_str($w) . ")", $wl);
             $lines[] = "false_positive =\n" . implode(" +\n", $parts);
-            $lines[] = "real_spam = spam_candidates - false_positive";
-        } else {
-            $lines[] = "real_spam = spam_candidates";
         }
+    }
+
+    if (!empty($spam['enabled'])) {
+        $lines[] = "spam_candidates = inbox:contain_field("
+            . lua_str($spam['header_field'] ?? 'X-KasSpamfilter') . ", "
+            . lua_str($spam['header_value'] ?? 'rSpamD') . ")";
+        $lines[] = !empty($wl) ? "real_spam = spam_candidates - false_positive" : "real_spam = spam_candidates";
         $spamVar = $targetFolders[$spam['target']] ?? lua_folder_var($spam['target'] ?? 'Spam');
         $lines[] = "inbox:move_messages($spamVar, real_spam)";
+    }
+
+    // ── Sperrliste (bekannte Spam-Absender) ──────────────────────────────────
+    if ($blActive) {
+        $lines[] = "\n-- Bekannte Spam-Absender (Sperrliste)";
+        $parts   = array_map(fn($a) => "    inbox:contain_from(" . lua_str($a) . ")", $blSenders);
+        $lines[] = "blacklist_candidates =\n" . implode(" +\n", $parts);
+        $lines[] = !empty($wl) ? "blacklist_real = blacklist_candidates - false_positive" : "blacklist_real = blacklist_candidates";
+        $blVar   = $targetFolders[$spam['target']] ?? lua_folder_var($spam['target']);
+        $lines[] = "inbox:move_messages($blVar, blacklist_real)";
     }
 
     $lines[]  = "\n-- ─── Filterregeln ───────────────────────────────────────────────────────────";

@@ -13,6 +13,7 @@ Web-UI zur Verwaltung von [imapfilter](https://github.com/lefcha/imapfilter)-Reg
 - **Mehrbenutzerbetrieb** — jeder Benutzer verwaltet sein eigenes IMAP-Konto
 - **Admin-Bereich** — Benutzer anlegen/löschen
 - **Filterregeln** per Formular (kein manuelles Lua-Editieren)
+- **Sperrliste** mit optionalem Auto-Lernen aus dem Spam-Ordner
 - **Lua-Generierung** aus JSON-Regeln
 - **Dispatcher** — zentrales Scheduling für alle Benutzer
 - **IMAP-Ordner** live anzeigen, anlegen, umbenennen und löschen
