@@ -50,3 +50,24 @@ function atomic_write_json(string $path, mixed $data, int $mode = 0640): bool {
     if ($json === false) return false;
     return atomic_write($path, $json, $mode);
 }
+
+/**
+ * Führt $fn unter einem exklusiven Dateilock aus. Dient dazu, konkurrierende
+ * Lese-Ändern-Schreiben-Zyklen auf derselben Datei zu serialisieren (z. B.
+ * Web-UI-Speichern vs. Cron-Dispatcher, die beide rules.json anfassen).
+ * Die Lockdatei wird bei Bedarf angelegt; sie enthält keine Nutzdaten.
+ */
+function with_file_lock(string $lockFile, callable $fn): mixed {
+    $fh = @fopen($lockFile, 'c');
+    if ($fh === false) {
+        // Lock nicht verfügbar — lieber ausführen als komplett zu blockieren
+        return $fn();
+    }
+    flock($fh, LOCK_EX);
+    try {
+        return $fn();
+    } finally {
+        flock($fh, LOCK_UN);
+        fclose($fh);
+    }
+}

@@ -361,7 +361,28 @@ automatisch an E-Mails anhängen, wenn sie als Spam erkannt wurden.
 - Klicke **„+ Hinzufügen"** oder drücke Enter
 - Mit `×` wieder entfernen
 
-### 8.2 Eigene Filterregel anlegen
+### 8.2 Sperrliste (⛔)
+
+Unterhalb des Spam-Filters befindet sich die Sperrliste. Absender darauf werden bei
+jedem Lauf direkt in den Spam-Zielordner verschoben — unabhängig davon, ob der
+Spam-Header (siehe 8.1) zutrifft. Whitelist-Einträge haben immer Vorrang.
+
+- **Manuell**: Adressen wie bei der Whitelist über das Eingabefeld hinzufügen/entfernen.
+- **„Automatisch lernen"**: Ist der Schalter aktiv, gleicht der Dispatcher bei jedem Lauf
+  die Sperrliste mit dem aktuellen Inhalt des Spam-Zielordners ab:
+  - Absender neuer Mails im Spam-Zielordner werden automatisch ergänzt (Duplikate werden
+    ignoriert, Whitelist-Einträge nie gesperrt).
+  - Wird eine zuvor im Spam-Ordner gesehene Mail von dort wieder in die INBOX verschoben,
+    wird ihr Absender wieder entsperrt — sofern er keine weitere Mail mehr im
+    Spam-Zielordner hat.
+  - Löschen einer Spam-Mail oder Verschieben in einen anderen Ordner führt **nie** zum
+    Entsperren.
+  - Beim ersten Aktivieren werden alle zu diesem Zeitpunkt bereits im Spam-Zielordner
+    liegenden Absender sofort übernommen.
+
+> Die Sperrliste nutzt denselben Zielordner wie der Spam-Filter (**Zielordner** unter 8.1).
+
+### 8.3 Eigene Filterregel anlegen
 
 Klicke auf **„+ Regel hinzufügen"**. Es öffnet sich ein Formular:
 

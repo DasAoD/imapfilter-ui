@@ -16,6 +16,8 @@ $baseDir = dirname(__DIR__);
 require_once $baseDir . '/config.php';
 require_once $baseDir . '/lib/users.php';
 require_once $baseDir . '/lib/atomic.php';
+require_once $baseDir . '/lib/generate.php';
+require_once $baseDir . '/lib/blacklist.php';
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
 
@@ -113,6 +115,22 @@ foreach ($users as $user) {
 
     if ($code === 0) {
         dispatcher_log("[$username] Fertig in {$duration}s (Exit: 0).");
+
+        // Sperrliste mit dem aktuellen Spam-Ordner abgleichen (Issue #1)
+        $sync = sync_spam_blacklist($paths);
+        if ($sync['error']) {
+            dispatcher_log("[$username] Sperrlisten-Abgleich übersprungen: {$sync['error']}");
+        } elseif ($sync['changed']) {
+            $parts = [];
+            if ($sync['added'])   $parts[] = 'neu gesperrt: ' . implode(', ', $sync['added']);
+            if ($sync['removed']) $parts[] = 'entsperrt: ' . implode(', ', $sync['removed']);
+            dispatcher_log("[$username] Sperrliste aktualisiert (" . implode(' · ', $parts) . ').');
+
+            $gen = generate_lua($paths, $username, $imapfilterBin);
+            if (!$gen['ok']) {
+                dispatcher_log("[$username] Lua-Neugenerierung nach Sperrlisten-Update fehlgeschlagen: {$gen['error']}");
+            }
+        }
     } else {
         dispatcher_log("[$username] Fehler! Exit-Code: $code (nach {$duration}s).");
     }
