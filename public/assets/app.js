@@ -211,7 +211,7 @@ const App = {
         const en  = s.enabled ? 'checked' : '';
         return `
 <div class="card" id="spam-card">
-  <div class="card-title">🚫 Spam-Filter <span class="badge">Globale Regel</span></div>
+  <div class="card-title">🚫 Spam-Filter <span class="badge">Kontoweite Regel</span></div>
   <div class="toggle-row">
     <div><div class="toggle-label">Spam-Erkennung aktiv</div></div>
     <label class="toggle"><input type="checkbox" ${en} onchange="App.setSpamEnabled(this.checked)"><span class="toggle-slider"></span></label>
@@ -249,7 +249,7 @@ const App = {
         const en  = b.enabled ? 'checked' : '';
         return `
 <div class="card" id="blacklist-card">
-  <div class="card-title">⛔ Sperrliste <span class="badge">Globale Regel</span></div>
+  <div class="card-title">⛔ Sperrliste <span class="badge">Kontoweite Regel</span></div>
   <div class="toggle-row">
     <div>
       <div class="toggle-label">Automatisch lernen</div>
