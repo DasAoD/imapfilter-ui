@@ -121,9 +121,11 @@ foreach ($users as $user) {
         if ($sync['error']) {
             dispatcher_log("[$username] Sperrlisten-Abgleich übersprungen: {$sync['error']}");
         } elseif ($sync['changed']) {
-            $parts = [];
-            if ($sync['added'])   $parts[] = 'neu gesperrt: ' . implode(', ', $sync['added']);
-            if ($sync['removed']) $parts[] = 'entsperrt: ' . implode(', ', $sync['removed']);
+            // Absenderadressen stammen aus Spam-Mails — vor dem Loggen von Steuerzeichen befreien
+            $forLog  = fn(array $a) => implode(', ', array_map(fn($s) => str_replace(["\r", "\n"], ' ', $s), $a));
+            $parts   = [];
+            if ($sync['added'])   $parts[] = 'neu gesperrt: ' . $forLog($sync['added']);
+            if ($sync['removed']) $parts[] = 'entsperrt: ' . $forLog($sync['removed']);
             dispatcher_log("[$username] Sperrliste aktualisiert (" . implode(' · ', $parts) . ').');
 
             $gen = generate_lua($paths, $username, $imapfilterBin);

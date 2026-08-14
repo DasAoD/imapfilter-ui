@@ -7,6 +7,7 @@
 require_once __DIR__ . '/atomic.php';
 
 function lua_str(string $s): string {
+    $s = preg_replace('/[\x00-\x1F\x7F]/', '', $s); // Steuerzeichen (u.a. CR/LF) entfernen
     $s = str_replace("\\", "\\\\", $s); // erst Backslash
     $s = str_replace("'",  "\\'",  $s); // dann Quote
     return "'" . $s . "'";

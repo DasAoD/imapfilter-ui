@@ -130,28 +130,38 @@ function sync_spam_blacklist(array $paths): array {
     $wl = $spam['whitelist'] ?? [];
 
     // ── Neue Nachrichten → Kandidaten zum Sperren sammeln (Option A) ─────────
+    // Absenderadressen aus Spam-Mails sind nicht vertrauenswürdig — nur echte
+    // E-Mail-Adressen übernehmen, bevor sie später in generiertes Lua wandern.
     $toAdd = [];
     foreach ($current as $mid => $addr) {
         if (array_key_exists($mid, $previous)) continue; // war beim letzten Lauf schon da
+        if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) continue;
         if (blacklist_is_whitelisted($addr, $wl)) continue;
         if (!in_array($addr, $toAdd, true)) $toAdd[] = $addr;
     }
 
     // ── Verschwundene Nachrichten → ggf. Kandidaten zum Entsperren (Option B) ─
+    // Abgleich ausschließlich über imap_fetch_overview() + String-Vergleich in
+    // PHP, ohne Absender-/Message-ID-Daten in eine IMAP-SEARCH-Query einzubetten.
     $toRemove    = [];
     $carryOver   = []; // konnten nicht geprüft werden → nächsten Lauf erneut versuchen
     $disappeared = array_diff_key($previous, $current);
     if (!empty($disappeared)) {
         if (@imap_reopen($imap, $conn['mbox'] . 'INBOX')) {
+            $inboxCount = @imap_num_msg($imap) ?: 0;
+            $inboxIds   = [];
+            if ($inboxCount > 0) {
+                $inboxOverviews = imap_fetch_overview($imap, '1:' . $inboxCount) ?: [];
+                foreach ($inboxOverviews as $iov) {
+                    $imid = trim((string)($iov->message_id ?? ''));
+                    if ($imid !== '') $inboxIds[$imid] = true;
+                }
+            }
             $stillPresent = array_values($current);
             foreach ($disappeared as $mid => $addr) {
                 // Absender hat noch eine andere Mail im Spam-Ordner → nicht entsperren
                 if (in_array($addr, $stillPresent, true)) continue;
-                // Message-ID stammt vom Absender selbst — Anführungszeichen/Zeilenumbrüche/
-                // Backslashes entfernen, bevor sie in die IMAP-SEARCH-Query eingebettet wird
-                $needle = preg_replace('/[\r\n"\\\\]/', '', $mid);
-                $found  = @imap_search($imap, 'HEADER Message-ID "' . $needle . '"', SE_UID);
-                if ($found) {
+                if (isset($inboxIds[$mid])) {
                     if (!in_array($addr, $toRemove, true)) $toRemove[] = $addr;
                 }
                 // sonst: Nachricht endgültig verschwunden (gelöscht/anderer Ordner) → nicht weiter tracken
