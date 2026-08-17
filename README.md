@@ -4,7 +4,8 @@
 > Die primäre Entwicklung findet auf **[git.uliana.de/DasAoD/imapfilter-ui](https://git.uliana.de/DasAoD/imapfilter-ui)** statt.
 > Issues und Pull Requests bitte dort öffnen.
 
-Web-UI zur Verwaltung von [imapfilter](https://github.com/lefcha/imapfilter)-Regeln und IMAP-Ordnern.  \nUnterstützt mehrere Benutzer — jeder mit eigenem Mailkonto, eigenen Regeln und eigenem Lua-Setup.
+Web-UI zur Verwaltung von [imapfilter](https://github.com/lefcha/imapfilter)-Regeln und IMAP-Ordnern.
+Unterstützt mehrere Benutzer — jeder mit eigenem Mailkonto, eigenen Regeln und eigenem Lua-Setup.
 
 ---
 
