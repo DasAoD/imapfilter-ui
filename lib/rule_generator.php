@@ -10,6 +10,7 @@
  */
 
 require_once __DIR__ . '/atomic.php';
+require_once __DIR__ . '/imap_helpers.php';
 
 /**
  * Öffnet eine IMAP-Verbindung auf Kontoebene (INBOX), damit anschließend mit
@@ -38,7 +39,7 @@ function rulegen_list_folders($imap, string $mbox): array {
     if ($raw === false) return [];
     $folders = [];
     foreach ($raw as $f) {
-        $folders[] = imap_utf8(substr($f, strlen($mbox)));
+        $folders[] = imap_folder_decode(substr($f, strlen($mbox)));
     }
     sort($folders);
     return $folders;
@@ -81,7 +82,7 @@ function rulegen_from_address(object $overview): ?string {
  * Liest alle Absenderdomains (inkl. führendem "@") aus einem Ordner.
  */
 function rulegen_scan_folder($imap, string $mbox, string $folder): array {
-    if (!@imap_reopen($imap, $mbox . imap_utf7_encode($folder))) return [];
+    if (!@imap_reopen($imap, $mbox . imap_folder_encode($folder))) return [];
     $count = @imap_num_msg($imap) ?: 0;
     if ($count === 0) return [];
 

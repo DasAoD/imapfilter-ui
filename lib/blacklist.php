@@ -13,6 +13,7 @@
  */
 
 require_once __DIR__ . '/atomic.php';
+require_once __DIR__ . '/imap_helpers.php';
 
 /**
  * Extrahiert die reine E-Mail-Adresse aus einem "Name <adresse>"-From-Header.
@@ -58,7 +59,7 @@ function blacklist_imap_open(array $settings, string $folder): array {
     $ssl = ($settings['ssl'] ?? true) ? '/ssl' : '';
     if (!empty($settings['ssl_novalidate'])) $ssl .= '/novalidate-cert';
     $mbox = '{' . $settings['host'] . ':' . ($settings['port'] ?? 993) . $ssl . '}';
-    $imap = @imap_open($mbox . imap_utf7_encode($folder), $settings['user'], $settings['pass'], 0, 1);
+    $imap = @imap_open($mbox . imap_folder_encode($folder), $settings['user'], $settings['pass'], 0, 1);
     if (!$imap) return ['error' => imap_last_error() ?: 'IMAP-Verbindung fehlgeschlagen.'];
     return ['imap' => $imap, 'mbox' => $mbox];
 }

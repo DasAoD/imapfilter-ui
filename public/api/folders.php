@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/auth_check.php';
+require_once dirname(__DIR__, 2) . '/lib/imap_helpers.php';
 header('Content-Type: application/json');
 
 $settingsJson = $userPaths['settings'];
@@ -29,7 +30,7 @@ if ($method === 'GET') {
     if ($raw === false) { echo json_encode(['ok' => false, 'error' => 'Ordnerliste konnte nicht abgerufen werden.']); exit; }
     $folders = [];
     foreach ($raw as $f) {
-        $name = imap_utf8(substr($f, strlen($conn['mbox'])));
+        $name = imap_folder_decode(substr($f, strlen($conn['mbox'])));
         $folders[] = $name;
     }
     sort($folders);
@@ -44,7 +45,7 @@ if ($method === 'POST' && $action === 'create') {
     if ($name === '') { echo json_encode(['ok' => false, 'error' => 'Kein Ordnername angegeben.']); exit; }
     $conn = get_imap_conn($settingsJson);
     if (isset($conn['error'])) { echo json_encode(['ok' => false, 'error' => $conn['error']]); exit; }
-    $result = imap_createmailbox($conn['imap'], imap_utf7_encode($conn['mbox'] . $name));
+    $result = imap_createmailbox($conn['imap'], $conn['mbox'] . imap_folder_encode($name));
     imap_close($conn['imap']);
     if (!$result) { echo json_encode(['ok' => false, 'error' => imap_last_error() ?: 'Ordner konnte nicht erstellt werden.']); exit; }
     echo json_encode(['ok' => true, 'message' => "Ordner '$name' erstellt."]);
@@ -62,8 +63,8 @@ if ($method === 'POST' && $action === 'rename') {
     if (isset($conn['error'])) { echo json_encode(['ok' => false, 'error' => $conn['error']]); exit; }
     $result = imap_renamemailbox(
         $conn['imap'],
-        imap_utf7_encode($conn['mbox'] . $oldName),
-        imap_utf7_encode($conn['mbox'] . $newName)
+        $conn['mbox'] . imap_folder_encode($oldName),
+        $conn['mbox'] . imap_folder_encode($newName)
     );
     imap_close($conn['imap']);
     if (!$result) { echo json_encode(['ok' => false, 'error' => imap_last_error() ?: 'Umbenennen fehlgeschlagen.']); exit; }
@@ -85,7 +86,7 @@ if ($method === 'DELETE') {
     $mbox = $conn['mbox'];
 
     // Mails in INBOX verschieben
-    $folder = imap_utf7_encode($mbox . $name);
+    $folder = $mbox . imap_folder_encode($name);
     $src = @imap_reopen($imap, $folder);
     if ($src) {
         $count = imap_num_msg($imap);
