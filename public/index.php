@@ -22,8 +22,10 @@ $isAdmin  = !empty($_SESSION['is_admin']);
         </div>
 
         <div class="sidebar-section">Verwaltung</div>
-        <a class="nav-item" data-view="rules"    href="#rules">   <i class="icon">⚙️</i> Filterregeln</a>
-        <a class="nav-item" data-view="folders"  href="#folders"> <i class="icon">📁</i> Ordner</a>
+        <a class="nav-item" data-view="rules"     href="#rules">     <i class="icon">⚙️</i> Filterregeln</a>
+        <a class="nav-item" data-view="spam"      href="#spam">      <i class="icon">🚫</i> Spam-Filter</a>
+        <a class="nav-item" data-view="blacklist" href="#blacklist"> <i class="icon">⛔</i> Sperrliste</a>
+        <a class="nav-item" data-view="folders"   href="#folders">   <i class="icon">📁</i> Ordner</a>
 
         <div class="sidebar-section">Werkzeuge</div>
         <a class="nav-item" data-view="run"      href="#run">     <i class="icon">▶️</i> Ausführen</a>
@@ -60,6 +62,28 @@ $isAdmin  = !empty($_SESSION['is_admin']);
                 </div>
             </div>
             <div id="rules-content"></div>
+        </div>
+
+        <!-- Spam-Filter view -->
+        <div id="view-spam" class="view" hidden>
+            <div class="view-header">
+                <h1 class="view-title">Spam-Filter</h1>
+                <div class="view-actions">
+                    <button class="btn btn-secondary" onclick="App.generateLua()" title="Lua-Dateien manuell neu generieren">⚡ Lua neu generieren</button>
+                </div>
+            </div>
+            <div id="spam-content"></div>
+        </div>
+
+        <!-- Sperrliste view -->
+        <div id="view-blacklist" class="view" hidden>
+            <div class="view-header">
+                <h1 class="view-title">Sperrliste</h1>
+                <div class="view-actions">
+                    <button class="btn btn-secondary" onclick="App.generateLua()" title="Lua-Dateien manuell neu generieren">⚡ Lua neu generieren</button>
+                </div>
+            </div>
+            <div id="blacklist-content"></div>
         </div>
 
         <!-- Folders view -->

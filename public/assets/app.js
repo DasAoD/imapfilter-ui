@@ -80,7 +80,7 @@ const App = {
 
     // ─── Router ────────────────────────────────────────────────────────────────
     navigate() {
-        const valid = ['rules', 'folders', 'run', 'editor', 'settings', 'password', 'admin', 'dispatcher'];
+        const valid = ['rules', 'spam', 'blacklist', 'folders', 'run', 'editor', 'settings', 'password', 'admin', 'dispatcher'];
         const hash  = location.hash.slice(1) || 'rules';
         const view  = valid.includes(hash) ? hash : 'rules';
 
@@ -173,8 +173,19 @@ const App = {
 
     async initRules() {
         if (!this.state.rules) await this.loadRules();
-        if (!this.state.folders.length) await this.loadFolders();
+        if (!this.state.folders.length) await this.loadFolders(); // für den Regel-Modal-Zielordner
         this.renderRules();
+    },
+
+    async initSpam() {
+        if (!this.state.rules) await this.loadRules();
+        if (!this.state.folders.length) await this.loadFolders(); // für den Zielordner-Select
+        this.renderSpam();
+    },
+
+    async initBlacklist() {
+        if (!this.state.rules) await this.loadRules();
+        this.renderBlacklist();
     },
 
     async loadRules() {
@@ -201,8 +212,20 @@ const App = {
     renderRules() {
         const el = document.getElementById('rules-content');
         if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
-        el.innerHTML = this.buildSpamCard() + this.buildBlacklistCard() + this.buildRulesListCard();
+        el.innerHTML = this.buildRulesListCard();
         this.bindRuleDragDrop();
+    },
+
+    renderSpam() {
+        const el = document.getElementById('spam-content');
+        if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
+        el.innerHTML = this.buildSpamCard();
+    },
+
+    renderBlacklist() {
+        const el = document.getElementById('blacklist-content');
+        if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
+        el.innerHTML = this.buildBlacklistCard();
     },
 
     buildSpamCard() {
@@ -361,13 +384,13 @@ const App = {
         });
         if (added) this.saveRules();
         inp.value = '';
-        this.renderRules();
+        this.renderSpam();
     },
 
     removeWhitelistEntry(val) {
         this.state.rules.spam.whitelist = (this.state.rules.spam.whitelist || []).filter(w => w !== val);
         this.saveRules();
-        this.renderRules();
+        this.renderSpam();
     },
 
     // ── Blacklist helpers ───────────────────────────────────────────────────────
@@ -395,13 +418,13 @@ const App = {
         });
         if (added) this.saveRules();
         inp.value = '';
-        this.renderRules();
+        this.renderBlacklist();
     },
 
     removeBlacklistEntry(val) {
         this.state.rules.blacklist.senders = (this.state.rules.blacklist.senders || []).filter(a => a !== val);
         this.saveRules();
-        this.renderRules();
+        this.renderBlacklist();
     },
 
     // ── Rule CRUD ───────────────────────────────────────────────────────────────
