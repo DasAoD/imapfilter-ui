@@ -58,6 +58,7 @@ $isAdmin  = !empty($_SESSION['is_admin']);
                 <h1 class="view-title">Filterregeln</h1>
                 <div class="view-actions">
                     <button class="btn btn-secondary" onclick="App.generateLua()" title="Lua-Dateien manuell neu generieren">⚡ Lua neu generieren</button>
+                    <button class="btn btn-secondary" onclick="App.openRuleGeneratorModal()" title="Regeln aus vorhandenem Ordnerinhalt vorschlagen">🪄 Regeln aus Ordnern generieren</button>
                     <button class="btn btn-primary"   onclick="App.openRuleModal()">+ Regel hinzufügen</button>
                 </div>
             </div>

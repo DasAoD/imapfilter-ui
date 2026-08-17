@@ -258,6 +258,7 @@ body {
 .tag-remove:hover { color: var(--error); }
 .tag-input-row { display: flex; gap: 6px; margin-top: 6px; }
 .tag-input-row input { flex: 1; }
+.tag-warn { background: rgba(234,179,8,0.15); border-color: rgba(234,179,8,0.45); }
 
 /* ─── Rules list ───────────────────────────────────────────────────────────── */
 .rules-list { display: flex; flex-direction: column; gap: 6px; }
