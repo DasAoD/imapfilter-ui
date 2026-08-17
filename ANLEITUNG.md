@@ -477,9 +477,16 @@ Der **Dispatcher** ist ein PHP-Skript, das einmal pro Minute aufgerufen wird und
 Benutzer prüft, ob sein eingestelltes Intervall abgelaufen ist. Falls ja, wird IMAPFilter gestartet.
 
 > **Einmalige Einrichtung durch den Admin** — danach läuft alles automatisch,
-> auch wenn neue Benutzer hinzukommen.
+> auch wenn neue Benutzer hinzukommen. Der Dispatcher ist eine **globale, kontenübergreifende
+> Einrichtung** (ein Skript für alle Benutzer) und wird deshalb nur **einmal pro Server**
+> eingerichtet — nicht pro Benutzer.
 
-Öffne im Admin-Bereich: **🕐 Dispatcher**
+> **Nur im Admin-Konto sichtbar:** Der Menüpunkt **🕐 Dispatcher** erscheint ausschließlich
+> in der Seitenleiste von Benutzern mit Admin-Rechten. Normale Benutzer sehen ihn nicht und
+> müssen sich auch nicht darum kümmern — für sie reicht das Setzen des **Ausführungs-Intervalls**
+> unter **🔌 IMAP-Einstellungen** (siehe Abschnitt 7).
+
+Melde dich mit dem Admin-Account an und öffne in der Seitenleiste: **🕐 Dispatcher**
 
 ---
 
