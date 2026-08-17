@@ -85,6 +85,11 @@ function rulegen_scan_folder($imap, string $mbox, string $folder): array {
     $count = @imap_num_msg($imap) ?: 0;
     if ($count === 0) return [];
 
+    // Obergrenze, damit ein einzelner sehr großer Ordner den gesamten Scan
+    // (der pro Aufruf über alle Ordner läuft) nicht blockiert.
+    $maxScan = 5000;
+    if ($count > $maxScan) return [];
+
     $overviews = imap_fetch_overview($imap, '1:' . $count) ?: [];
     $domains   = [];
     foreach ($overviews as $ov) {
@@ -160,6 +165,28 @@ function rulegen_build_suggestions(array $rulesData, array $scanned): array {
             'conflicts' => $conflicts,
         ];
     }
+
+    // Zusätzlich Domains markieren, die im selben Scan-Durchlauf in mehreren
+    // Ordner-Vorschlägen gleichzeitig als "neu" auftauchen (z.B. ein Absender,
+    // der sowohl in "Newsletter" als auch in "Shop" abgelegt wurde) — sonst
+    // würde man sonst pro Ordner sauber aussehende, aber sich überschneidende
+    // Regeln anlegen.
+    $domainCounts = [];
+    foreach ($suggestions as $s) {
+        foreach ($s['domains'] as $d) {
+            $domainCounts[$d][] = $s['target'];
+        }
+    }
+    foreach ($suggestions as &$s) {
+        foreach ($s['domains'] as $d) {
+            if (count($domainCounts[$d]) > 1 && !isset($s['conflicts'][$d])) {
+                $others = array_filter($domainCounts[$d], fn($t) => $t !== $s['target']);
+                $s['conflicts'][$d] = 'auch vorgeschlagen für: ' . implode(', ', array_unique($others));
+            }
+        }
+    }
+    unset($s);
+
     return $suggestions;
 }
 
@@ -210,6 +237,10 @@ function rulegen_apply(array &$rulesData, array $selections): array {
             fn($d) => mb_strtolower(trim((string)$d)), $sel['domains'] ?? []
         ))));
         if ($target === '' || empty($domains)) continue;
+        // INBOX kann nie sinnvolles Regel-Ziel sein — lib/generate.php deklariert
+        // dafür keine eigene Ordner-Variable, eine solche Regel würde die
+        // Lua-Generierung für den ganzen Account zum Absturz bringen.
+        if (strcasecmp($target, 'INBOX') === 0) continue;
 
         $idx = null;
         foreach ($rulesData['rules'] as $i => $r) {
@@ -217,8 +248,13 @@ function rulegen_apply(array &$rulesData, array $selections): array {
         }
 
         if ($idx !== null) {
-            $current = array_map(fn($a) => mb_strtolower(trim($a)), $rulesData['rules'][$idx]['from_addresses'] ?? []);
-            $rulesData['rules'][$idx]['from_addresses'] = array_values(array_unique(array_merge($current, $domains)));
+            // Nur wirklich neue Domains anhängen — bestehende Einträge (inkl.
+            // ihrer ursprünglichen Schreibweise) bleiben unangetastet.
+            $existingAddrs = $rulesData['rules'][$idx]['from_addresses'] ?? [];
+            $existingLower = array_map(fn($a) => mb_strtolower(trim($a)), $existingAddrs);
+            $toAppend      = array_values(array_diff($domains, $existingLower));
+            if (empty($toAppend)) continue;
+            $rulesData['rules'][$idx]['from_addresses'] = array_merge($existingAddrs, $toAppend);
             $updated++;
         } else {
             $newRule = [

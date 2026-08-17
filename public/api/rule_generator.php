@@ -19,6 +19,7 @@ $action = $_GET['action'] ?? '';
 
 // ─── GET ?action=preview: Ordner scannen, Vorschläge berechnen ──────────────
 if ($method === 'GET' && $action === 'preview') {
+    @set_time_limit(120); // Scan läuft über alle Ordner des Kontos, kann etwas dauern
     $settings = rg_read_json($settingsJson);
     if (empty($settings['host'])) {
         echo json_encode(['ok' => false, 'error' => 'IMAP-Einstellungen noch nicht konfiguriert.']); exit;
@@ -37,6 +38,9 @@ if ($method === 'GET' && $action === 'preview') {
     $scanned    = [];
     $excludedBy = [];
     foreach ($folders as $f) {
+        // INBOX kann nie Regel-Ziel sein (siehe rulegen_apply()) — erst gar
+        // nicht scannen, damit es auch nie als Vorschlag auftauchen kann.
+        if (strcasecmp($f, 'INBOX') === 0) continue;
         if (rulegen_default_excluded($f, $spamTarget)) $excludedBy[$f] = true;
         $domains = rulegen_scan_folder($imap, $conn['mbox'], $f);
         if (!empty($domains)) $scanned[$f] = $domains;
@@ -66,9 +70,13 @@ if ($method === 'POST' && $action === 'apply') {
     $result   = ['ok' => false, 'error' => 'Konnte rules.json nicht speichern.'];
 
     with_file_lock($lockFile, function () use ($rulesJson, $body, &$result) {
-        $rulesData = rg_read_json($rulesJson, []);
+        // Noch nie gespeicherte rules.json (Account, an dem der reguläre
+        // Regel-Editor noch nie "Speichern" ausgelöst hat) ist kein Fehler —
+        // dann fangen wir eben mit einer leeren Grundstruktur an.
+        $default = ['version' => 1, 'spam' => ['enabled' => true, 'whitelist' => [], 'target' => 'Spam'], 'blacklist' => ['enabled' => false, 'senders' => []], 'rules' => []];
+        $rulesData = file_exists($rulesJson) ? rg_read_json($rulesJson, []) : $default;
         if (empty($rulesData)) {
-            $result = ['ok' => false, 'error' => 'rules.json nicht gefunden oder ungültig.'];
+            $result = ['ok' => false, 'error' => 'rules.json ist ungültig oder beschädigt.'];
             return;
         }
         $stats = rulegen_apply($rulesData, $body['selections']);
