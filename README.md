@@ -13,6 +13,7 @@ Web-UI zur Verwaltung von [imapfilter](https://github.com/lefcha/imapfilter)-Reg
 - **Mehrbenutzerbetrieb** — jeder Benutzer verwaltet sein eigenes IMAP-Konto
 - **Admin-Bereich** — Benutzer anlegen/löschen
 - **Filterregeln** per Formular (kein manuelles Lua-Editieren)
+- **Filterregeln automatisch generieren** — aus dem vorhandenen Inhalt der IMAP-Ordner vorgeschlagen, mit Vorschau vor dem Übernehmen
 - **Sperrliste** mit optionalem Auto-Lernen aus dem Spam-Ordner
 - **Lua-Generierung** aus JSON-Regeln
 - **Dispatcher** — zentrales Scheduling für alle Benutzer
@@ -22,7 +23,7 @@ Web-UI zur Verwaltung von [imapfilter](https://github.com/lefcha/imapfilter)-Reg
 
 ## Mitwirkende
 
-Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 4.5) von [Anthropic](https://anthropic.com) entwickelt.  
+Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 5) von [Anthropic](https://anthropic.com) entwickelt.  
 Der überwiegende Teil des Codes, der Architektur und der Dokumentation wurde durch KI generiert und iterativ verfeinert.
 
 | Rolle | Person / Tool |

@@ -340,9 +340,13 @@ Klicke **„💾 Intervall speichern"**.
 
 ## 8. Filterregeln anlegen
 
-Klicke in der Seitenleiste auf **⚙️ Filterregeln**.
+**Spam-Filter**, **Sperrliste** und **Filterregeln** sind eigene Menüpunkte in der
+Seitenleiste (vorher eine einzige, bei vielen Regeln sehr lange Seite). Die Funktionen
+selbst sind unverändert, nur auf mehrere Seiten verteilt.
 
 ### 8.1 Spam-Filter konfigurieren
+
+Klicke in der Seitenleiste auf **🚫 Spam-Filter**.
 
 Der Spam-Filter-Block ist standardmäßig aktiviert. Er nutzt einen Header, den viele Hoster
 automatisch an E-Mails anhängen, wenn sie als Spam erkannt wurden.
@@ -363,9 +367,9 @@ automatisch an E-Mails anhängen, wenn sie als Spam erkannt wurden.
 
 ### 8.2 Sperrliste (⛔)
 
-Unterhalb des Spam-Filters befindet sich die Sperrliste. Absender darauf werden bei
-jedem Lauf direkt in den Spam-Zielordner verschoben — unabhängig davon, ob der
-Spam-Header (siehe 8.1) zutrifft. Whitelist-Einträge haben immer Vorrang.
+Klicke in der Seitenleiste auf **⛔ Sperrliste**. Absender darauf werden bei jedem Lauf
+direkt in den Spam-Zielordner verschoben — unabhängig davon, ob der Spam-Header (siehe 8.1)
+zutrifft. Whitelist-Einträge haben immer Vorrang.
 
 - **Manuell**: Adressen wie bei der Whitelist über das Eingabefeld hinzufügen/entfernen.
 - **„Automatisch lernen"**: Ist der Schalter aktiv, gleicht der Dispatcher bei jedem Lauf
@@ -384,7 +388,8 @@ Spam-Header (siehe 8.1) zutrifft. Whitelist-Einträge haben immer Vorrang.
 
 ### 8.3 Eigene Filterregel anlegen
 
-Klicke auf **„+ Regel hinzufügen"**. Es öffnet sich ein Formular:
+Klicke in der Seitenleiste auf **⚙️ Filterregeln**, dann auf **„+ Regel hinzufügen"**.
+Es öffnet sich ein Formular:
 
 | Feld | Erklärung | Beispiel |
 |---|---|---|
@@ -404,6 +409,37 @@ Klicke auf **„+ Regel hinzufügen"**. Es öffnet sich ein Formular:
 - Das **Empfänger-Feld** ist nützlich für Mails, die du als Kopie (CC) empfängst oder die an eine Sammeladresse gehen
 - **Reihenfolge ist wichtig:** Regeln für Unterordner (z. B. `Familie/Max`) müssen **vor** der Regel für den übergeordneten Ordner (`Familie`) stehen
 - Reihenfolge per **Drag & Drop** ändern (an den `⋮⋮`-Griffen ziehen)
+
+### 8.4 Regeln automatisch aus Ordnerinhalten generieren
+
+Statt jede Regel einzeln anzulegen, kann das Web-UI Regelvorschläge direkt aus dem
+**vorhandenen Inhalt deiner IMAP-Ordner** ableiten — praktisch vor allem bei der
+Ersteinrichtung eines Kontos, wenn Mails schon manuell einsortiert wurden.
+
+Klicke auf der Filterregeln-Seite auf **„🪄 Regeln aus Ordnern generieren"**.
+
+**Was passiert dabei:**
+
+- Alle Ordner werden durchsucht (außer INBOX und dem Spam-Zielordner) und die
+  Absender-**Domains** der darin liegenden Mails ermittelt.
+- Für jeden Ordner mit Treffern erscheint eine **Vorschau**: neue Regel oder Ergänzung
+  einer bestehenden Regel für denselben Zielordner, jeweils mit Checkbox.
+- **Vorausgewählt** sind alle Ordner außer erkannten System-Ordnern (Gesendet/Sent,
+  Papierkorb/Trash, Entwürfe/Drafts, Junk) — das lässt sich pro Ordner frei umschalten.
+- **⚠️** markiert Domains, die schon anderswo verwendet werden (eine andere Regel,
+  die Sperrliste, die Whitelist, oder ein *weiterer* Ordner-Vorschlag im selben Durchlauf) —
+  in dem Fall prüfen, ob die Zuordnung so gewollt ist.
+- Regelname und -pfad orientieren sich am Ordnerpfad; bei Unterordnern werden neue Regeln
+  automatisch **vor** der Regel für den übergeordneten Ordner einsortiert (siehe 8.3).
+- **Nichts wird gespeichert, bevor du auf „Übernehmen" klickst.**
+
+> **Hinweis:** Es wird immer die reine **Domain** (Teil ab `@`) übernommen, nie die volle
+> Adresse. Bei Ordnern für einzelne Personen mit Freemail-Adressen (gmail.com, web.de,
+> gmx.de, …) ist das oft zu grob — dort die vorgeschlagene Regel danach im normalen
+> Editor (8.3) auf die volle Adresse (`max@gmail.com` statt `@gmail.com`) umstellen.
+>
+> Der Vorgang läuft nur, wenn du ihn manuell anstößt — es gibt (anders als bei der
+> Sperrliste) keine Dauer-Automatik, die laufend neue Regeln anlegt.
 
 ---
 
@@ -728,6 +764,7 @@ journalctl -u imapfilter-dispatcher.service -n 30
 │   │   ├── editor.php
 │   │   ├── folders.php          ← Ordner anzeigen/anlegen/umbenennen/löschen
 │   │   ├── generate.php
+│   │   ├── rule_generator.php   ← Regeln aus Ordnerinhalten (Vorschau + Übernehmen)
 │   │   ├── rules.php
 │   │   ├── run.php
 │   │   ├── settings.php
@@ -747,8 +784,11 @@ journalctl -u imapfilter-dispatcher.service -n 30
 │   ├── imapfilter-dispatcher.timer    ← systemd Timer
 │   └── imapfilter-dispatcher.cron     ← Cron-Datei
 ├── lib/
-│   ├── atomic.php               ← Atomare Schreiboperationen
+│   ├── atomic.php               ← Atomare Schreiboperationen + Datei-Lock
+│   ├── blacklist.php            ← Sperrlisten-Abgleich mit dem Spam-Ordner
 │   ├── generate.php             ← Lua-Generierungslogik
+│   ├── imap_helpers.php         ← Ordnernamen-Encoding (UTF-7 ↔ UTF-8)
+│   ├── rule_generator.php       ← Regeln aus Ordnerinhalten generieren
 │   └── users.php                ← Benutzerverwaltungs-Funktionen
 └── config.php                   ← Konfiguration (Pfade) — außerhalb des Webroots
 
@@ -761,6 +801,8 @@ journalctl -u imapfilter-dispatcher.service -n 30
     ├── filters.lua              ← Generiert: Filterregeln (0640)
     ├── folders.lua              ← Generiert: Ordner (0640)
     ├── rules.json               ← UI-Regeln (0640)
+    ├── rules.json.lock          ← Nur Lock-Datei, kein Inhalt
+    ├── blacklist_state.json     ← Letzter Sperrlisten-Abgleich (Message-ID → Absender)
     ├── imap_settings.json       ← IMAP-Zugangsdaten + Intervall (0600)
     └── backups/                 ← Automatische Sicherungen (max. 10 pro Datei)
 
@@ -847,10 +889,10 @@ Admin kann Passwörter anderer Benutzer über die Benutzerverwaltung zurücksetz
 
 ## Mitwirkende
 
-Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 4.5) von [Anthropic](https://anthropic.com) entwickelt.  
+Dieses Projekt wurde in Zusammenarbeit mit [Claude](https://claude.ai) (Sonnet 5) von [Anthropic](https://anthropic.com) entwickelt.  
 Der überwiegende Teil des Codes, der Architektur und der Dokumentation wurde durch KI generiert und iterativ verfeinert.
 
 | Rolle | Person / Tool |
 |---|---|
-| Projektidee & Anforderungen | [DasAoD](https://github.com/DasAoD) |
-| Code, Architektur, Dokumentation | Claude (Anthropic) |
+| Projektidee & Anforderungen | [DasAoD](https://git.uliana.de/DasAoD) |
+| Code, Architektur, Dokumentation | [Claude](https://git.uliana.de/Claude) (Anthropic) |
