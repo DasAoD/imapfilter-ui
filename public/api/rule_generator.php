@@ -5,6 +5,12 @@ require_once dirname(__DIR__, 2) . '/lib/generate.php';
 require_once dirname(__DIR__, 2) . '/lib/atomic.php';
 header('Content-Type: application/json');
 
+// Die c-client-Bibliothek sammelt IMAP-Alerts/-Fehler (z.B. bei defekten
+// Ordnernamen) in einer internen Queue und gibt sie sonst am Skriptende als
+// HTML-formatierte Notices aus — das würde die JSON-Antwort korrumpieren.
+// display_errors abschalten und die Queue nach den IMAP-Aufrufen aktiv leeren.
+ini_set('display_errors', '0');
+
 $rulesJson    = $userPaths['rules'];
 $settingsJson = $userPaths['settings'];
 
@@ -45,6 +51,10 @@ if ($method === 'GET' && $action === 'preview') {
         $domains = rulegen_scan_folder($imap, $conn['mbox'], $f);
         if (!empty($domains)) $scanned[$f] = $domains;
     }
+    // IMAP-Alert-/Fehler-Queue leeren, bevor sie am Skriptende automatisch
+    // ausgegeben und die JSON-Antwort verunreinigen würde (siehe oben).
+    imap_errors();
+    imap_alerts();
     imap_close($imap);
 
     $suggestions = rulegen_build_suggestions($rulesData, $scanned);
