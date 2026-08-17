@@ -10,7 +10,7 @@ $isAdmin  = !empty($_SESSION['is_admin']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>IMAPFilter Web-UI</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/style.css?v=<?= @filemtime(__DIR__ . '/assets/style.css') ?: time() ?>">
 </head>
 <body>
 <div id="app">
@@ -349,6 +349,6 @@ chmod 644 /etc/cron.d/imapfilter-dispatcher</pre>
     window.IS_ADMIN      = <?= json_encode($isAdmin) ?>;
     window.CSRF_TOKEN    = <?= json_encode($_SESSION['csrf_token']) ?>;
 </script>
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=<?= @filemtime(__DIR__ . '/assets/app.js') ?: time() ?>"></script>
 </body>
 </html>
