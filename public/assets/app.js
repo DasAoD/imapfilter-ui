@@ -427,6 +427,76 @@ const App = {
         this.renderBlacklist();
     },
 
+    // ── Regel-Generator (aus Ordnerinhalten) ──────────────────────────────────────
+    async openRuleGeneratorModal() {
+        this.openModal('Regeln aus Ordnerinhalten generieren',
+            '<div class="empty-state">📡 Ordner werden durchsucht … (kann je nach Postfachgröße etwas dauern)</div>', null);
+        const res = await this.apiGet('api/rule_generator.php?action=preview');
+        if (!res || !res.ok) {
+            this.openModal('Regeln aus Ordnerinhalten generieren',
+                `<div class="empty-state">${this.esc(res?.error || 'Fehler beim Scannen der Ordner.')}</div>`, null);
+            return;
+        }
+        this.state.rulegenSuggestions = res.suggestions || [];
+        this.renderRuleGeneratorModal();
+    },
+
+    renderRuleGeneratorModal() {
+        const list = this.state.rulegenSuggestions || [];
+        if (!list.length) {
+            this.openModal('Regeln aus Ordnerinhalten generieren',
+                '<div class="empty-state">Keine neuen Vorschläge gefunden — entweder sind die Ordner leer oder schon vollständig als Regel erfasst.</div>', null);
+            return;
+        }
+        const rows = list.map((s, i) => {
+            const domainTags = s.domains.map(d => {
+                const conflict = s.conflicts && s.conflicts[d];
+                const cls   = conflict ? 'tag tag-warn' : 'tag';
+                const title = conflict ? ` title="Bereits verwendet in: ${this.esc(conflict)}"` : '';
+                return `<span class="${cls}"${title}>${this.esc(d)}${conflict ? ' ⚠️' : ''}</span>`;
+            }).join(' ');
+            const kindLabel = s.kind === 'new' ? 'Neue Regel' : `Ergänzt „${this.esc(s.name)}"`;
+            return `
+<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+  <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+    <input type="checkbox" class="rulegen-check" data-idx="${i}" ${s.preselected ? 'checked' : ''} style="margin-top:3px">
+    <div style="flex:1">
+      <div><strong>${this.esc(s.name)}</strong> <span class="text-muted text-sm">→ 📁 ${this.esc(s.target)}</span> <span class="badge">${kindLabel}</span></div>
+      <div style="margin-top:4px">${domainTags}</div>
+    </div>
+  </label>
+</div>`;
+        }).join('');
+
+        const body = `
+<p class="text-muted text-sm" style="margin-bottom:10px">Gefunden anhand des aktuellen Ordnerinhalts (Absenderdomains). Vorausgewählt sind alle außer INBOX, Spam-Zielordner und erkannten System-Ordnern (Gesendet/Papierkorb/Entwürfe o.ä.) — bei Bedarf einfach an- oder abwählen. ⚠️ markiert Domains, die schon anderswo verwendet werden (andere Regel, Sperrliste oder Whitelist).</p>
+<div id="rulegen-list">${rows}</div>`;
+
+        this.openModal('Regeln aus Ordnerinhalten generieren', body, () => this.applyRuleGenerator(), 'Übernehmen');
+    },
+
+    async applyRuleGenerator() {
+        const list       = this.state.rulegenSuggestions || [];
+        const selections = [];
+        document.querySelectorAll('.rulegen-check').forEach(cb => {
+            if (!cb.checked) return;
+            const s = list[parseInt(cb.dataset.idx, 10)];
+            if (s) selections.push({ target: s.target, domains: s.domains });
+        });
+        if (!selections.length) { this.closeModal(); return; }
+
+        const res = await this.apiPost('api/rule_generator.php?action=apply', { selections });
+        if (res && res.ok) {
+            this.toast(`${res.added} neue Regel(n), ${res.updated} ergänzt.` + (res.warning ? ' ⚠️ ' + res.warning : ''), res.warning ? 'warn' : 'ok');
+            this.closeModal();
+            this.state.rules = null;
+            await this.loadRules();
+            this.renderRules();
+        } else {
+            this.toast(res?.error || 'Fehler beim Übernehmen.', 'error');
+        }
+    },
+
     // ── Rule CRUD ───────────────────────────────────────────────────────────────
     openRuleModal(idx = null) {
         const isEdit = idx !== null;
