@@ -876,12 +876,41 @@ const App = {
         if (!el) return;
         const res = await this.apiGet('api/run.php?lines=100');
         if (res && res.ok) {
-            const text = res.log || '';
+            const raw   = res.log || '';
+            const lines = raw.split('\n').filter(l => l.trim() !== '');
+            const text  = lines.map(l => this.formatLogLine(l)).join('\n');
             el.textContent = text || '(Logdatei leer)';
             el.scrollTop   = el.scrollHeight;
         } else {
             el.innerHTML = `<span class="log-empty">${this.esc(res?.error || 'Fehler beim Laden.')}</span>`;
         }
+    },
+
+    // Rohe imapfilter-Log-Zeile in eine lesbarere Form bringen. Zeitstempel-Präfix
+    // (falls vorhanden) bleibt erhalten, "N messages moved from user@host/A to
+    // user@host/B." wird auf "A → B" eingedampft — der Rest (Fehler/Warnungen von
+    // imapfilter selbst) bleibt unverändert sichtbar, nur mit ⚠️ markiert.
+    formatLogLine(line) {
+        const tsMatch = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*(.*)$/);
+        const ts = tsMatch ? tsMatch[1] : null;
+        let rest = tsMatch ? tsMatch[2] : line;
+
+        let manual = false;
+        const manualMatch = rest.match(/^\(manuell\)\s*(.*)$/);
+        if (manualMatch) { manual = true; rest = manualMatch[1]; }
+
+        const moveMatch = rest.match(/^(\d+) messages? moved from [^/]+\/(.+) to [^/]+\/(.+)\.$/);
+        let text;
+        if (moveMatch) {
+            const [, count, from, to] = moveMatch;
+            text = `📬 ${count} Mail${count === '1' ? '' : 's'} verschoben: ${from} → ${to}`;
+        } else if (/^imapfilter:/.test(rest)) {
+            text = `⚠️ ${rest}`;
+        } else {
+            text = rest;
+        }
+        if (manual) text = `🖱️ ${text} (manueller Lauf)`;
+        return ts ? `${ts}  ${text}` : text;
     },
 
     async runImapfilter() {
@@ -897,13 +926,9 @@ const App = {
             } else {
                 this.toast(res.error || `Fehler (Code ${res.exit_code}).`, 'error');
             }
-            // Append output to log
-            const el = document.getElementById('log-output');
-            if (el && res.output) {
-                el.textContent += '\n--- Manueller Lauf ---\n' + res.output;
-                el.scrollTop = el.scrollHeight;
-            }
         }
+        // run.php hat die Ausgabe bereits mit Zeitstempel ins persistente Log
+        // geschrieben — hier reicht ein Neuladen statt eines eigenen Zwischenstands.
         await this.loadLog();
     },
 
