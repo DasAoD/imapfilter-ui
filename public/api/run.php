@@ -36,6 +36,15 @@ if ($method === 'POST') {
     exec($cmd, $output, $code);
     @unlink($lockFile);
 
+    // Ausgabe mit Zeitstempel ins persistente Log schreiben — gleiches Format wie
+    // der Dispatcher, damit manuelle Läufe genauso nachvollziehbar sind.
+    $logOutput = array_filter($output, fn($line) => trim($line) !== '');
+    if (!empty($logOutput)) {
+        $ts       = date('Y-m-d H:i:s');
+        $logLines = array_map(fn($line) => "[$ts] (manuell) $line", $logOutput);
+        file_put_contents($logFile, implode("\n", $logLines) . "\n", FILE_APPEND | LOCK_EX);
+    }
+
     echo json_encode(['ok' => ($code === 0), 'exit_code' => $code, 'output' => implode("\n", $output), 'message' => $code === 0 ? 'imapfilter erfolgreich ausgeführt.' : "imapfilter beendet mit Code $code."]);
     exit;
 }

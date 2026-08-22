@@ -104,13 +104,23 @@ foreach ($users as $user) {
     $cmd     = 'HOME=/tmp timeout 120 '
              . escapeshellarg($imapfilterBin)
              . ' -c ' . escapeshellarg($paths['config'])
-             . ' >> ' . escapeshellarg($logFile)
              . ' 2>&1';
 
     dispatcher_log("[$username] Starte imapfilter (Intervall: {$intervalMin} Min.)…");
-    $start = microtime(true);
-    exec($cmd, $output, $code);
+    $start            = microtime(true);
+    $imapfilterOutput = [];
+    exec($cmd, $imapfilterOutput, $code);
     $duration = round(microtime(true) - $start, 1);
+
+    // Ausgabe mit Zeitstempel ins Benutzer-Log schreiben (statt per Shell-Redirect
+    // ohne jeden Zeitbezug) — ein Zeitstempel pro Lauf, damit im "Ausführen"-Log
+    // erkennbar ist, wann zuletzt Mails verschoben wurden.
+    $imapfilterOutput = array_filter($imapfilterOutput, fn($line) => trim($line) !== '');
+    if (!empty($imapfilterOutput)) {
+        $ts       = date('Y-m-d H:i:s');
+        $logLines = array_map(fn($line) => "[$ts] $line", $imapfilterOutput);
+        file_put_contents($logFile, implode("\n", $logLines) . "\n", FILE_APPEND | LOCK_EX);
+    }
 
     if ($code === 0) {
         dispatcher_log("[$username] Fertig in {$duration}s (Exit: 0).");
