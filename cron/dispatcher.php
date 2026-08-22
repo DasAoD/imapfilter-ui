@@ -115,6 +115,7 @@ foreach ($users as $user) {
     // Ausgabe mit Zeitstempel ins Benutzer-Log schreiben (statt per Shell-Redirect
     // ohne jeden Zeitbezug) — ein Zeitstempel pro Lauf, damit im "Ausführen"-Log
     // erkennbar ist, wann zuletzt Mails verschoben wurden.
+    $imapfilterOutput = array_filter($imapfilterOutput, fn($line) => trim($line) !== '');
     if (!empty($imapfilterOutput)) {
         $ts       = date('Y-m-d H:i:s');
         $logLines = array_map(fn($line) => "[$ts] $line", $imapfilterOutput);

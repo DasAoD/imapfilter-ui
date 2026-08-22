@@ -909,7 +909,7 @@ const App = {
         } else {
             text = rest;
         }
-        if (manual) text = `🖱️ ${text} (manueller Lauf)`;
+        if (manual) text = `${text} · manueller Lauf`;
         return ts ? `${ts}  ${text}` : text;
     },
 

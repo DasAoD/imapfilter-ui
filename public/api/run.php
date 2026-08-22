@@ -38,9 +38,10 @@ if ($method === 'POST') {
 
     // Ausgabe mit Zeitstempel ins persistente Log schreiben — gleiches Format wie
     // der Dispatcher, damit manuelle Läufe genauso nachvollziehbar sind.
-    if (!empty($output)) {
+    $logOutput = array_filter($output, fn($line) => trim($line) !== '');
+    if (!empty($logOutput)) {
         $ts       = date('Y-m-d H:i:s');
-        $logLines = array_map(fn($line) => "[$ts] (manuell) $line", $output);
+        $logLines = array_map(fn($line) => "[$ts] (manuell) $line", $logOutput);
         file_put_contents($logFile, implode("\n", $logLines) . "\n", FILE_APPEND | LOCK_EX);
     }
 
