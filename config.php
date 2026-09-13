@@ -19,6 +19,12 @@ $imapfilterBin = '/usr/bin/imapfilter';
 // Logverzeichnis — pro Benutzer: /var/log/imapfilter/<username>.log
 $logDir = '/var/log/imapfilter';
 
+// ─── Zeitzone ─────────────────────────────────────────────────────────────────
+// Ohne diese Angabe verwendet PHP UTC für date() — die Zeitstempel in den
+// Logs (Dispatcher, manuelle Läufe, Login-Fehlversuche) liefen dadurch der
+// lokalen Zeit hinterher.
+date_default_timezone_set('Europe/Berlin');
+
 // ─── Erster Start ─────────────────────────────────────────────────────────────
 // Beim allerersten Aufruf (users.json leer / nicht vorhanden) erscheint ein
 // Setup-Formular zum Anlegen des ersten Admin-Accounts.
