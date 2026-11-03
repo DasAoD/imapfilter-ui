@@ -10,7 +10,7 @@ function default_rules(): array {
     return [
         'version'   => 1,
         'spam'      => ['enabled' => true, 'header_field' => 'X-KasSpamfilter', 'header_value' => 'rSpamD', 'whitelist' => [], 'target' => 'Spam'],
-        'blacklist' => ['enabled' => false, 'senders' => []],
+        'blacklist' => ['enabled' => false, 'senders' => [], 'recipients' => [], 'subjects' => []],
         'rules'     => [],
     ];
 }
@@ -37,12 +37,18 @@ if ($method === 'POST') {
     $body['version'] = 1;
 
     // Sperrliste normalisieren: trimmen, klein schreiben, deduplizieren
-    $bl = $body['blacklist'] ?? ['enabled' => false, 'senders' => []];
-    $senders = array_values(array_unique(array_filter(array_map(
-        fn($s) => mb_strtolower(trim((string)$s)), $bl['senders'] ?? []
-    ))));
-    sort($senders);
-    $body['blacklist'] = ['enabled' => !empty($bl['enabled']), 'senders' => $senders];
+    $bl = $body['blacklist'] ?? [];
+    $lists = [];
+    foreach (['senders', 'recipients', 'subjects'] as $key) {
+        $lists[$key] = blacklist_normalize_list($bl[$key] ?? []);
+        sort($lists[$key]);
+    }
+    foreach (array_merge($lists['recipients'], $lists['subjects']) as $pattern) {
+        if (!blacklist_pattern_is_ascii($pattern)) {
+            echo json_encode(['ok' => false, 'error' => 'Betreff- und Empfänger-Muster dürfen nur ASCII-Zeichen enthalten (keine Umlaute, Emoji oder Sonderzeichen).']); exit;
+        }
+    }
+    $body['blacklist'] = ['enabled' => !empty($bl['enabled'])] + $lists;
 
     // Unter demselben Lock schreiben wie der Cron-Dispatcher (lib/blacklist.php),
     // damit sich Web-UI-Speichern und automatischer Sperrlisten-Abgleich nicht
