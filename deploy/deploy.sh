@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wird auf vpn per SSH-Forced-Command aus dem Deploy-Workflow aufgerufen
+# Wird auf dem Server per SSH-Forced-Command aus dem Deploy-Workflow aufgerufen
 # (authorized_keys: command="/usr/local/sbin/deploy-imapfilter-ui",restrict ...).
 # Liegt bewusst als Kopie ausserhalb des Checkouts: sonst wuerde ein Tag das
 # Skript austauschen, das ihn ausrollt. Aenderungen hier muessen von Hand nach

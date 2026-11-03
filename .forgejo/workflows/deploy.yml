@@ -1,13 +1,13 @@
 name: Deploy
 
-# Rollt einen Tag vX.Y.Z auf Prod (vpn) aus. Der Job laeuft als Container auf dem
-# vpn-runner (Label ubuntu-latest) und verbindet sich per SSH mit vpn; der Key ist
+# Rollt einen Tag vX.Y.Z auf Prod aus. Der Job laeuft als Container auf dem
+# Forgejo-Runner (Label ubuntu-latest) und verbindet sich per SSH mit dem Server; der Key ist
 # dort per authorized_keys auf das Skript deploy/deploy.sh beschraenkt (Forced Command).
 #
 # Voraussetzungen:
 # - Repo-Secret DEPLOY_SSH_KEY (privater Key), oeffentlicher Teil in /root/.ssh/authorized_keys
-#   auf vpn als: command="/usr/local/sbin/deploy-imapfilter-ui",restrict <pubkey>
-# - Hostkey von vpn ist unten fest hinterlegt (kein Trust-on-first-use im frischen Container)
+#   auf dem Server als: command="/usr/local/sbin/deploy-imapfilter-ui",restrict <pubkey>
+# - Hostkey des Servers ist unten fest hinterlegt (kein Trust-on-first-use im frischen Container)
 
 on:
   push:
