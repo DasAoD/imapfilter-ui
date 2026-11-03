@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/atomic.php';
+require_once __DIR__ . '/blacklist.php';
 
 function lua_str(string $s): string {
     $s = preg_replace('/[\x00-\x1F\x7F]/', '', $s); // Steuerzeichen (u.a. CR/LF) entfernen
@@ -83,10 +84,11 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
 
     // Gesperrte Absender (Sperrliste) — unabhängig vom "automatisch lernen"-Schalter
     // immer wirksam, sobald Einträge vorhanden sind (vgl. Issue #1).
-    $blSenders = array_values(array_unique(array_filter(array_map(
-        fn($s) => mb_strtolower(trim($s)), $blacklist['senders'] ?? []
-    ))));
-    $blActive  = !empty($blSenders) && !empty($spam['target']) && $spam['target'] !== 'INBOX';
+    $blSenders    = blacklist_normalize_list($blacklist['senders'] ?? []);
+    $blRecipients = blacklist_normalize_list($blacklist['recipients'] ?? []);
+    $blSubjects   = blacklist_normalize_list($blacklist['subjects'] ?? []);
+    $blActive  = (!empty($blSenders) || !empty($blRecipients) || !empty($blSubjects))
+              && !empty($spam['target']) && $spam['target'] !== 'INBOX';
 
     // ── Zielordner sammeln ────────────────────────────────────────────────────
     $targetFolders = [];
@@ -150,8 +152,12 @@ function generate_lua(array $paths, string $username, string $imapfilterBin): ar
 
     // ── Sperrliste (bekannte Spam-Absender) ──────────────────────────────────
     if ($blActive) {
-        $lines[] = "\n-- Bekannte Spam-Absender (Sperrliste)";
-        $parts   = array_map(fn($a) => "    inbox:contain_from(" . lua_str($a) . ")", $blSenders);
+        $lines[] = "\n-- Sperrliste (Absender, Empfänger, Betreff)";
+        $parts   = array_merge(
+            array_map(fn($a) => "    inbox:contain_from(" . lua_str($a) . ")", $blSenders),
+            array_map(fn($a) => "    inbox:contain_to(" . lua_str($a) . ")", $blRecipients),
+            array_map(fn($a) => "    inbox:contain_subject(" . lua_str($a) . ")", $blSubjects)
+        );
         $lines[] = "blacklist_candidates =\n" . implode(" +\n", $parts);
         $lines[] = !empty($wl) ? "blacklist_real = blacklist_candidates - false_positive" : "blacklist_real = blacklist_candidates";
         $blVar   = $targetFolders[$spam['target']] ?? lua_folder_var($spam['target']);

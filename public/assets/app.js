@@ -268,7 +268,19 @@ const App = {
 
     buildBlacklistCard() {
         const b   = this.state.rules.blacklist || { enabled: false, senders: [] };
-        const tags = (b.senders || []).map(a => `<span class="tag" data-action="remove-blacklist" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Entfernen">×</button></span>`).join('');
+        const group = (kind, label, placeholder, hint) => {
+            const tags = (b[kind] || []).map(a => `<span class="tag" data-action="remove-blacklist" data-kind="${kind}" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Entfernen">×</button></span>`).join('');
+            return `
+  <div class="form-group" style="margin-top:14px">
+    <label class="form-label">${label}</label>
+    <div class="tag-list" id="blacklist-tags-${kind}">${tags || '<span class="text-muted text-sm">Keine Einträge</span>'}</div>
+    <div class="tag-input-row" style="margin-top:8px">
+      <input class="form-input" id="bl-input-${kind}" placeholder="${placeholder}" onkeydown="if(event.key==='Enter'){App.addBlacklistEntry('${kind}');event.preventDefault()}">
+      <button class="btn btn-secondary btn-sm" onclick="App.addBlacklistEntry('${kind}')">+ Hinzufügen</button>
+    </div>${hint ? `
+    <p class="text-muted text-sm" style="margin-top:8px">${hint}</p>` : ''}
+  </div>`;
+        };
         const en  = b.enabled ? 'checked' : '';
         return `
 <div class="card" id="blacklist-card">
@@ -280,15 +292,10 @@ const App = {
     </div>
     <label class="toggle"><input type="checkbox" ${en} onchange="App.setBlacklistEnabled(this.checked)"><span class="toggle-slider"></span></label>
   </div>
-  <div class="form-group" style="margin-top:14px">
-    <label class="form-label">Gesperrte Absender (Mails werden immer in den Spam-Zielordner verschoben)</label>
-    <div class="tag-list" id="blacklist-tags">${tags || '<span class="text-muted text-sm">Keine Einträge</span>'}</div>
-    <div class="tag-input-row" style="margin-top:8px">
-      <input class="form-input" id="bl-input" placeholder="absender@domain.de, …" onkeydown="if(event.key==='Enter'){App.addBlacklistEntry();event.preventDefault()}">
-      <button class="btn btn-secondary btn-sm" onclick="App.addBlacklistEntry()">+ Hinzufügen</button>
-    </div>
-    <p class="text-muted text-sm" style="margin-top:8px">Wirkt unabhängig vom Schalter oben, sobald Einträge vorhanden sind. Whitelist-Einträge haben Vorrang.</p>
-  </div>
+${group('senders', 'Gesperrte Absender (Mails werden immer in den Spam-Zielordner verschoben)', 'absender@domain.de, …', '')}
+${group('subjects', 'Gesperrte Betreff-Muster (Teilstring im Betreff)', 'Gratis Auto-Notfallset, …', 'Ohne Groß-/Kleinschreibung, nur ASCII (keine Umlaute, Emoji oder Sonderzeichen).')}
+${group('recipients', 'Gesperrte Empfänger (Teilstring im An-Feld, z. B. eine Alias-Adresse)', 'alias@domain.de, …', 'Nur ASCII.')}
+  <p class="text-muted text-sm" style="margin-top:14px">Alle Listen wirken unabhängig vom Schalter oben, sobald Einträge vorhanden sind. Whitelist-Einträge haben Vorrang.</p>
 </div>`;
     },
 
@@ -400,19 +407,23 @@ const App = {
         this.saveRules();
     },
 
-    addBlacklistEntry() {
-        const inp = document.getElementById('bl-input');
+    addBlacklistEntry(kind = 'senders') {
+        const inp = document.getElementById('bl-input-' + kind);
         const values = inp.value
             .split(/[,;\n]+/)
             .map(v => v.trim().toLowerCase())
             .filter(v => v.length > 0);
         if (!values.length) return;
+        if (kind !== 'senders' && values.some(v => !/^[\x20-\x7e]+$/.test(v))) {
+            this.toast('Betreff- und Empfänger-Muster dürfen nur ASCII-Zeichen enthalten.', 'error');
+            return;
+        }
         if (!this.state.rules.blacklist) this.state.rules.blacklist = { enabled: false, senders: [] };
-        if (!this.state.rules.blacklist.senders) this.state.rules.blacklist.senders = [];
+        if (!this.state.rules.blacklist[kind]) this.state.rules.blacklist[kind] = [];
         let added = false;
         values.forEach(val => {
-            if (!this.state.rules.blacklist.senders.includes(val)) {
-                this.state.rules.blacklist.senders.push(val);
+            if (!this.state.rules.blacklist[kind].includes(val)) {
+                this.state.rules.blacklist[kind].push(val);
                 added = true;
             }
         });
@@ -421,8 +432,8 @@ const App = {
         this.renderBlacklist();
     },
 
-    removeBlacklistEntry(val) {
-        this.state.rules.blacklist.senders = (this.state.rules.blacklist.senders || []).filter(a => a !== val);
+    removeBlacklistEntry(kind, val) {
+        this.state.rules.blacklist[kind] = (this.state.rules.blacklist[kind] || []).filter(a => a !== val);
         this.saveRules();
         this.renderBlacklist();
     },
@@ -1345,7 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'remove-blacklist': {
                 const tag = btn.closest('.tag');
                 const val = tag?.dataset.val;
-                if (val) App.removeBlacklistEntry(val);
+                if (val) App.removeBlacklistEntry(tag.dataset.kind || 'senders', val);
                 break;
             }
             // Modal-Tags (Von/An/Betreff)

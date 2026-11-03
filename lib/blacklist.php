@@ -223,3 +223,19 @@ function sync_spam_blacklist(array $paths): array {
 
     return $result;
 }
+
+function blacklist_normalize_list($items): array {
+    if (!is_array($items)) return [];
+    return array_values(array_unique(array_filter(
+        array_map(fn($s) => mb_strtolower(trim($s)), array_filter($items, 'is_string')),
+        fn($s) => $s !== ''
+    )));
+}
+
+/**
+ * Betreff- und Empfänger-Muster gehen per IMAP SEARCH an den Server, der
+ * Umlaute und Sonderzeichen unzuverlässig vergleicht (Issue #7) — nur ASCII zulassen.
+ */
+function blacklist_pattern_is_ascii(string $s): bool {
+    return (bool)preg_match('/^[\x20-\x7E]+$/', $s);
+}
