@@ -101,6 +101,30 @@ foreach ($users as $user) {
     // Lockfile anlegen
     file_put_contents($lockFile, getmypid());
 
+    // Sperrliste mit dem aktuellen Spam-Ordner abgleichen (Issue #1). Muss vor
+    // imapfilter laufen (Issue #9): sonst schiebt imapfilter eine gerettete Mail
+    // zurück in den Spam-Ordner, bevor der Abgleich sie in der INBOX sieht.
+    // Läuft unter demselben Lockfile wie imapfilter selbst, damit ein
+    // überlappender Dispatcher-Lauf (Cron alle 60s) nicht gleichzeitig auf
+    // blacklist_state.json desselben Benutzers zugreift.
+    $sync = sync_spam_blacklist($paths);
+    if ($sync['error']) {
+        $errForLog = str_replace(["\r", "\n"], ' ', $sync['error']);
+        dispatcher_log("[$username] Sperrlisten-Abgleich übersprungen: $errForLog");
+    } elseif ($sync['changed']) {
+        // Absenderadressen stammen aus Spam-Mails — vor dem Loggen von Steuerzeichen befreien
+        $forLog  = fn(array $a) => implode(', ', array_map(fn($s) => str_replace(["\r", "\n"], ' ', $s), $a));
+        $parts   = [];
+        if ($sync['added'])   $parts[] = 'neu gesperrt: ' . $forLog($sync['added']);
+        if ($sync['removed']) $parts[] = 'entsperrt: ' . $forLog($sync['removed']);
+        dispatcher_log("[$username] Sperrliste aktualisiert (" . implode(' · ', $parts) . ').');
+
+        $gen = generate_lua($paths, $username, $imapfilterBin);
+        if (!$gen['ok']) {
+            dispatcher_log("[$username] Lua-Neugenerierung nach Sperrlisten-Update fehlgeschlagen: {$gen['error']}");
+        }
+    }
+
     $cmd     = 'HOME=/tmp timeout 120 '
              . escapeshellarg($imapfilterBin)
              . ' -c ' . escapeshellarg($paths['config'])
@@ -124,28 +148,6 @@ foreach ($users as $user) {
 
     if ($code === 0) {
         dispatcher_log("[$username] Fertig in {$duration}s (Exit: 0).");
-
-        // Sperrliste mit dem aktuellen Spam-Ordner abgleichen (Issue #1).
-        // Läuft noch unter demselben Lockfile wie imapfilter selbst, damit ein
-        // überlappender Dispatcher-Lauf (Cron alle 60s) nicht gleichzeitig auf
-        // blacklist_state.json desselben Benutzers zugreift.
-        $sync = sync_spam_blacklist($paths);
-        if ($sync['error']) {
-            $errForLog = str_replace(["\r", "\n"], ' ', $sync['error']);
-            dispatcher_log("[$username] Sperrlisten-Abgleich übersprungen: $errForLog");
-        } elseif ($sync['changed']) {
-            // Absenderadressen stammen aus Spam-Mails — vor dem Loggen von Steuerzeichen befreien
-            $forLog  = fn(array $a) => implode(', ', array_map(fn($s) => str_replace(["\r", "\n"], ' ', $s), $a));
-            $parts   = [];
-            if ($sync['added'])   $parts[] = 'neu gesperrt: ' . $forLog($sync['added']);
-            if ($sync['removed']) $parts[] = 'entsperrt: ' . $forLog($sync['removed']);
-            dispatcher_log("[$username] Sperrliste aktualisiert (" . implode(' · ', $parts) . ').');
-
-            $gen = generate_lua($paths, $username, $imapfilterBin);
-            if (!$gen['ok']) {
-                dispatcher_log("[$username] Lua-Neugenerierung nach Sperrlisten-Update fehlgeschlagen: {$gen['error']}");
-            }
-        }
     } else {
         dispatcher_log("[$username] Fehler! Exit-Code: $code (nach {$duration}s).");
     }
