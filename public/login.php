@@ -150,7 +150,7 @@ $blocked   = rl_is_blocked($ip);
 <div style="min-height:100vh;display:flex;align-items:center;justify-content:center">
 <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px;width:340px">
     <div style="font-size:1.1rem;font-weight:700;color:#60a5fa;margin-bottom:4px">📧 IMAPFilter</div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:20px">Web-UI</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:20px">Web-UI<?php if ($appVersion !== ''): ?> · v<?= htmlspecialchars($appVersion) ?><?php endif; ?></div>
 
     <?php if ($setupDone): ?>
         <div style="background:#052e16;border:1px solid #14532d;color:#86efac;border-radius:5px;padding:8px 10px;font-size:.85rem;margin-bottom:14px">
