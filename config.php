@@ -19,6 +19,11 @@ $imapfilterBin = '/usr/bin/imapfilter';
 // Logverzeichnis — pro Benutzer: /var/log/imapfilter/<username>.log
 $logDir = '/var/log/imapfilter';
 
+// ─── Version ──────────────────────────────────────────────────────────────────
+// Kommt aus der Datei VERSION im Repo-Root (ohne "v"); der Deploy-Workflow
+// prüft, dass sie zum Tag passt.
+$appVersion = trim((string)@file_get_contents(__DIR__ . '/VERSION'));
+
 // ─── Zeitzone ─────────────────────────────────────────────────────────────────
 // Ohne diese Angabe verwendet PHP UTC für date() — die Zeitstempel in den
 // Logs (Dispatcher, manuelle Läufe, Login-Fehlversuche) liefen dadurch der

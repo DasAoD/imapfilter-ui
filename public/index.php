@@ -18,7 +18,7 @@ $isAdmin  = !empty($_SESSION['is_admin']);
     <nav id="sidebar">
         <div class="sidebar-logo">
             <div class="sidebar-logo-title">📧 IMAPFilter</div>
-            <div class="sidebar-logo-sub">Web-UI</div>
+            <div class="sidebar-logo-sub">Web-UI<?php if ($appVersion !== ''): ?> · v<?= htmlspecialchars($appVersion) ?><?php endif; ?></div>
         </div>
 
         <div class="sidebar-section">Verwaltung</div>

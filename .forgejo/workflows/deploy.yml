@@ -1,0 +1,37 @@
+name: Deploy
+
+# Rollt einen Tag vX.Y.Z auf Prod (vpn) aus. Der Job laeuft als Container auf dem
+# vpn-runner (Label ubuntu-latest) und verbindet sich per SSH mit vpn; der Key ist
+# dort per authorized_keys auf das Skript deploy/deploy.sh beschraenkt (Forced Command).
+#
+# Voraussetzungen:
+# - Repo-Secret DEPLOY_SSH_KEY (privater Key), oeffentlicher Teil in /root/.ssh/authorized_keys
+#   auf vpn als: command="/usr/local/sbin/deploy-imapfilter-ui",restrict <pubkey>
+# - Hostkey von vpn ist unten fest hinterlegt (kein Trust-on-first-use im frischen Container)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Check VERSION matches tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test "v$(tr -d "[:space:]" < VERSION)" = "$TAG"
+
+      - name: Deploy via SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo 'vpn.uliana.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL9z7CeOZNGkrihKg3nt8mCWKsCg2gxk0QVS1U0bWEja' > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes root@vpn.uliana.de "$TAG"
