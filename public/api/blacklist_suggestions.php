@@ -23,6 +23,8 @@ if ($target === '' || $target === 'INBOX') {
     echo json_encode(['ok' => false, 'error' => 'Kein gültiger Spam-Zielordner konfiguriert.']); exit;
 }
 
+// Sonst hält die Session-Sperre andere Requests desselben Benutzers während des IMAP-Scans auf.
+session_write_close();
 @set_time_limit(60);
 $conn = blacklist_imap_open($settings, $target);
 if (isset($conn['error'])) {
@@ -33,6 +35,8 @@ $count = @imap_num_msg($imap) ?: 0;
 $spamOverviews = $count > 0 ? (imap_fetch_overview($imap, max(1, $count - $maxScan + 1) . ':' . $count) ?: []) : [];
 
 $result = blacklist_suggest($spamOverviews, $rules['blacklist'] ?? []);
+// Bei abgeschnittenem Scan kennen wir nicht alle Mails eines Absenders: nichts zum Aufräumen vorschlagen.
+if ($count > $maxScan) $result['redundant'] = [];
 
 // Wie viele Mails der INBOX würde das Muster treffen? Null = nicht ermittelt.
 $hits = null;

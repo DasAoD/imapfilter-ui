@@ -224,6 +224,7 @@ const App = {
 
     renderBlacklist() {
         const el = document.getElementById('blacklist-content');
+        if (!el) return; // Tab inzwischen gewechselt (z. B. nach dem Laden der Vorschläge)
         if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
         el.innerHTML = this.buildBlacklistCard() + this.buildSuggestionsCard();
     },
