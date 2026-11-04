@@ -47,8 +47,11 @@ imap_errors();
 imap_alerts();
 imap_close($imap);
 
-$result = blacklist_suggest($spamOverviews, $rules['blacklist'] ?? [], $inboxOverviews);
+$blacklist = $rules['blacklist'] ?? [];
+$whitelist = array_values(array_filter((array)($rules['spam']['whitelist'] ?? []), 'is_string'));
+$result = blacklist_suggest($spamOverviews, $blacklist, $inboxOverviews, $whitelist);
+$names  = blacklist_suggest_names($spamOverviews, $blacklist, $inboxOverviews, $whitelist);
 // Bei abgeschnittenem Scan kennen wir nicht alle Mails eines Absenders: nichts zum Aufräumen vorschlagen.
 if ($count > $maxScan) $result['redundant'] = [];
 
-echo json_encode(['ok' => true, 'patterns' => $result['patterns'], 'redundant' => $result['redundant']]);
+echo json_encode(['ok' => true, 'patterns' => $result['patterns'], 'names' => $names, 'redundant' => $result['redundant']]);

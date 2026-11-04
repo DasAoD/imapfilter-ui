@@ -299,6 +299,24 @@ function blacklist_subject_phrases(string $norm): array {
 }
 
 /**
+ * Klammer-Etiketten wie "[adac]" oder "(dpd)" an beliebiger Stelle des Betreffs.
+ * Spam setzt die vorgetäuschte Marke oft so voran; Zähler wie "(1)" haben zu wenige Buchstaben.
+ *
+ * @param string $raw dekodierter, kleingeschriebener Betreff
+ * @return string[]
+ */
+function blacklist_subject_tags(string $raw): array {
+    if (!preg_match_all('/\[[^\[\]()]{2,40}\]|\([^\[\]()]{2,40}\)/', $raw, $m)) return [];
+    $out = [];
+    foreach ($m[0] as $t) {
+        if (strlen($t) < 5 || !blacklist_pattern_is_ascii($t) || strpbrk($t, "@\"\\") !== false) continue;
+        if (preg_match_all('/[a-z]/', $t) < 3) continue;
+        $out[$t] = true;
+    }
+    return array_keys($out);
+}
+
+/**
  * Prüft wie imapfilter (contain_subject/contain_to: Teilstring ohne Groß-/Kleinschreibung),
  * ob eine Mail von einem Betreff- oder Empfänger-Muster erfasst wird.
  */
@@ -331,7 +349,7 @@ function blacklist_matches(object $overview, array $subjects, array $recipients)
  * @param object[]|null $inboxOverviews INBOX-Mails für die Trefferprüfung; null = nicht geprüft
  * @return array{patterns: array<int, array{pattern: string, mails: int, senders: int, inbox_hits: ?int}>, redundant: string[]}
  */
-function blacklist_suggest(array $overviews, array $bl, ?array $inboxOverviews = null, int $minMails = 4, int $minSenders = 3): array {
+function blacklist_suggest(array $overviews, array $bl, ?array $inboxOverviews = null, array $whitelist = [], int $minMails = 4, int $minSenders = 3): array {
     $subjects   = blacklist_normalize_list($bl['subjects'] ?? []);
     $recipients = blacklist_normalize_list($bl['recipients'] ?? []);
     $known      = blacklist_normalize_list($bl['senders'] ?? []);
@@ -347,7 +365,8 @@ function blacklist_suggest(array $overviews, array $bl, ?array $inboxOverviews =
 
         // imapfilter sucht im rohen Betreff; die Normalisierung (Leerzeichen, Re:) darf kein Muster erzeugen, das die Quellmail nicht trifft.
         $raw = mb_strtolower(blacklist_decode_header((string)($ov->subject ?? '')));
-        foreach (blacklist_subject_phrases(blacklist_subject_normalize((string)($ov->subject ?? ''))) as $c) {
+        $phrases = array_merge(blacklist_subject_phrases(blacklist_subject_normalize((string)($ov->subject ?? ''))), blacklist_subject_tags($raw));
+        foreach (array_unique($phrases) as $c) {
             if (!str_contains($raw, $c)) continue;
             $groups[$c]['mails'][$i] = true;
             $groups[$c]['senders'][$addr] = true;
@@ -357,8 +376,8 @@ function blacklist_suggest(array $overviews, array $bl, ?array $inboxOverviews =
     $groups = array_filter($groups, fn($g) => count($g['mails']) >= $minMails && count($g['senders']) >= $minSenders);
     $hits = null;
     if ($inboxOverviews !== null && $groups) {
-        // Muster enthalten immer ein Leerzeichen, sind also nie numerische (Integer-)Array-Schlüssel.
-        $hits = blacklist_inbox_hits($inboxOverviews, array_keys($groups));
+        // Muster enthalten ein Leerzeichen oder beginnen mit einer Klammer, sind also nie numerische (Integer-)Array-Schlüssel.
+        $hits = blacklist_inbox_hits($inboxOverviews, array_keys($groups), 'subject', $whitelist);
         $groups = array_filter($groups, fn($g, $p) => ($hits[$p] ?? 0) === 0, ARRAY_FILTER_USE_BOTH);
     }
 
@@ -392,20 +411,80 @@ function blacklist_suggest(array $overviews, array $bl, ?array $inboxOverviews =
 }
 
 /**
- * Zählt, wie viele Mails der INBOX ein Betreff-Muster treffen würde, damit sich
- * ein zu allgemeiner Vorschlag vor dem Übernehmen erkennen lässt.
+ * Zählt, wie viele Mails der INBOX ein Muster treffen würde, damit sich ein zu
+ * allgemeiner Vorschlag vor dem Übernehmen erkennen lässt. Mails von Absendern der
+ * Whitelist zählen nicht, weil die Whitelist in der Sperrliste Vorrang hat.
  *
  * @param object[] $overviews Ergebnis von imap_fetch_overview() für die INBOX
- * @param string[] $patterns  normalisierte Betreff-Muster
+ * @param string[] $patterns  kleingeschriebene Muster
+ * @param string   $field     'subject' oder 'from' (ganzer Header, wie contain_from)
  * @return array<string, int> Muster => Anzahl Treffer
  */
-function blacklist_inbox_hits(array $overviews, array $patterns): array {
+function blacklist_inbox_hits(array $overviews, array $patterns, string $field = 'subject', array $whitelist = []): array {
     $hits = array_fill_keys($patterns, 0);
     foreach ($overviews as $ov) {
-        $subject = mb_strtolower(blacklist_decode_header((string)($ov->subject ?? '')));
+        if ($whitelist) {
+            $addr = blacklist_from_address($ov);
+            if ($addr !== null && blacklist_is_whitelisted($addr, $whitelist)) continue;
+        }
+        $text = mb_strtolower(blacklist_decode_header((string)($ov->$field ?? '')));
         foreach ($patterns as $p) {
-            if (str_contains($subject, $p)) $hits[$p]++;
+            if (str_contains($text, $p)) $hits[$p]++;
         }
     }
     return $hits;
+}
+
+/**
+ * Vorschläge für Absendernamen: derselbe ASCII-Anzeigename bei mindestens
+ * $minAddresses verschiedenen Adressen im Spam-Ordner und ohne Treffer in der INBOX.
+ * contain_from durchsucht den ganzen From-Header, ein Name trifft also alle seine Adressen.
+ * Wechselnde Unicode-Schreibweisen (Lookalike-Zeichen) sind kein ASCII und entfallen.
+ *
+ * @param object[]      $overviews      Spam-Ordner
+ * @param object[]|null $inboxOverviews INBOX für die Trefferprüfung; null = nicht geprüft
+ * @return array<int, array{pattern: string, mails: int, senders: int, inbox_hits: ?int}>
+ */
+function blacklist_suggest_names(array $overviews, array $bl, ?array $inboxOverviews = null, array $whitelist = [], int $minAddresses = 3): array {
+    $known  = blacklist_normalize_list($bl['senders'] ?? []);
+    $groups = [];
+    foreach ($overviews as $ov) {
+        $addr = blacklist_from_address($ov);
+        if ($addr === null) continue;
+        $header = mb_strtolower(blacklist_decode_header((string)($ov->from ?? '')));
+        foreach ($known as $k) {
+            if (str_contains($header, $k)) continue 2; // Mail ist schon durch die Absenderliste erfasst
+        }
+        if ($whitelist && blacklist_is_whitelisted($addr, $whitelist)) continue;
+        $name = trim(preg_replace('/\s*<[^>]*>\s*$/', '', $header) ?? '', " \t\"'");
+        if (strlen($name) < 4 || !blacklist_pattern_is_ascii($name) || strpbrk($name, "@\\\"") !== false) continue;
+        if (preg_match_all('/[a-z]/', $name) < 3 || !str_contains($header, $name)) continue;
+        $groups[$name]['mails'] = ($groups[$name]['mails'] ?? 0) + 1;
+        $groups[$name]['addrs'][$addr] = true;
+    }
+    // contain_from durchsucht auch die Adresse: ein Name, der Teil einer Adresse ist ("info"), träfe zu viel
+    foreach ($groups as $name => $g) {
+        foreach (array_keys($g['addrs']) as $a) {
+            if (str_contains($a, (string)$name)) { unset($groups[$name]); continue 2; }
+        }
+    }
+    $groups = array_filter($groups, fn($g) => count($g['addrs']) >= $minAddresses);
+
+    $hits = null;
+    if ($inboxOverviews !== null && $groups) {
+        $hits = blacklist_inbox_hits($inboxOverviews, array_map('strval', array_keys($groups)), 'from', $whitelist);
+        $groups = array_filter($groups, fn($g, $n) => ($hits[$n] ?? 0) === 0, ARRAY_FILTER_USE_BOTH);
+    }
+
+    uksort($groups, fn($a, $b) => strlen($a) <=> strlen($b));
+    $accepted = [];
+    foreach ($groups as $name => $g) {
+        foreach ($accepted as $other) {
+            if (str_contains($name, $other['pattern'])) continue 2; // kürzerer Name erfasst ihn schon
+        }
+        $accepted[] = ['pattern' => (string)$name, 'mails' => $g['mails'], 'senders' => count($g['addrs']),
+                       'inbox_hits' => $hits === null ? null : 0];
+    }
+    usort($accepted, fn($a, $b) => [$b['senders'], $b['mails']] <=> [$a['senders'], $a['mails']]);
+    return array_slice($accepted, 0, 20);
 }
