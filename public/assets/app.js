@@ -224,8 +224,75 @@ const App = {
 
     renderBlacklist() {
         const el = document.getElementById('blacklist-content');
+        if (!el) return; // Tab inzwischen gewechselt (z. B. nach dem Laden der Vorschläge)
         if (!this.state.rules) { el.innerHTML = '<div class="empty-state">Lädt…</div>'; return; }
-        el.innerHTML = this.buildBlacklistCard();
+        el.innerHTML = this.buildBlacklistCard() + this.buildSuggestionsCard();
+    },
+
+    buildSuggestionsCard() {
+        const s = this.state.blSuggestions;
+        let body = '';
+        if (s?.loading) {
+            body = '<div class="empty-state">Lädt…</div>';
+        } else if (s?.error) {
+            body = `<p class="text-muted text-sm">${this.esc(s.error)}</p>`;
+        } else if (s) {
+            const rows = s.patterns.map(p => {
+                const inbox = p.inbox_hits === null ? 'INBOX: nicht ermittelt'
+                    : (p.inbox_hits > 0 ? `⚠️ würde ${p.inbox_hits} Mail(s) in der INBOX treffen` : 'trifft keine Mail in der INBOX');
+                return `
+    <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <code>${this.esc(p.pattern)}</code>
+        <div class="text-muted text-sm">${p.mails} Spam-Mails von ${p.senders} Absendern · ${inbox}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" data-action="accept-suggestion" data-val="${this.esc(p.pattern)}">Übernehmen</button>
+    </div>`;
+            }).join('');
+            body = s.patterns.length ? `${rows}
+    <p class="text-muted text-sm" style="margin-top:8px">Bei Treffern in der INBOX ⚠️ vor dem Übernehmen prüfen, ob das Muster zu allgemein ist.</p>`
+                : '<p class="text-muted text-sm">Keine Vorschläge.</p>';
+            if (s.redundant.length) {
+                const tags = s.redundant.map(a => `<span class="tag" data-action="remove-redundant" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Aus der Sperrliste entfernen">×</button></span>`).join('');
+                body += `
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">Schon durch ein Muster abgedeckte Absender (Aufräumen)</label>
+      <div class="tag-list">${tags}</div>
+      <p class="text-muted text-sm" style="margin-top:8px">Alle Mails dieser Absender im Spam-Ordner treffen ein Muster. Ein Klick entfernt den Absender aus der Sperrliste; künftige Mails mit anderem Betreff wären dann nicht mehr gesperrt.</p>
+    </div>`;
+            }
+        }
+        return `
+<div class="card" id="suggestions-card" style="margin-top:16px">
+  <div class="card-title">💡 Vorschläge für Betreff-Muster</div>
+  <p class="text-muted text-sm">Aus dem Spam-Ordner: Betreffs, die in mindestens 3 Mails von mindestens 2 Absendern vorkommen. Nichts wird automatisch übernommen.</p>
+  <button class="btn btn-secondary btn-sm" style="margin:8px 0" onclick="App.loadBlacklistSuggestions()">Vorschläge laden</button>
+  ${body}
+</div>`;
+    },
+
+    async loadBlacklistSuggestions() {
+        this.state.blSuggestions = { loading: true };
+        this.renderBlacklist();
+        const res = await this.apiGet('api/blacklist_suggestions.php');
+        this.state.blSuggestions = res && res.ok
+            ? { patterns: res.patterns, redundant: res.redundant }
+            : { error: res?.error || 'Vorschläge konnten nicht geladen werden.' };
+        this.renderBlacklist();
+    },
+
+    acceptSuggestion(pattern) {
+        const bl = this.state.rules.blacklist;
+        if (!bl.subjects) bl.subjects = [];
+        if (!bl.subjects.includes(pattern)) bl.subjects.push(pattern);
+        this.state.blSuggestions.patterns = this.state.blSuggestions.patterns.filter(p => p.pattern !== pattern);
+        this.saveRules();
+        this.renderBlacklist();
+    },
+
+    removeRedundant(addr) {
+        this.state.blSuggestions.redundant = this.state.blSuggestions.redundant.filter(a => a !== addr);
+        this.removeBlacklistEntry('senders', addr);
     },
 
     buildSpamCard() {
@@ -1357,6 +1424,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tag = btn.closest('.tag');
                 const val = tag?.dataset.val;
                 if (val) App.removeBlacklistEntry(tag.dataset.kind || 'senders', val);
+                break;
+            }
+            case 'accept-suggestion':
+                App.acceptSuggestion(btn.dataset.val);
+                break;
+            case 'remove-redundant': {
+                const val = btn.closest('.tag')?.dataset.val;
+                if (val) App.removeRedundant(val);
                 break;
             }
             // Modal-Tags (Von/An/Betreff)
