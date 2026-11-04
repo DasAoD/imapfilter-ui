@@ -237,7 +237,7 @@ const App = {
         } else if (s?.error) {
             body = `<p class="text-muted text-sm">${this.esc(s.error)}</p>`;
         } else if (s) {
-            const rows = s.patterns.map(p => {
+            const row = (kind, p) => {
                 const inbox = p.inbox_hits === null ? '⚠️ INBOX nicht geprüft' : 'trifft keine Mail in der INBOX';
                 return `
     <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)">
@@ -245,10 +245,17 @@ const App = {
         <code>${this.esc(p.pattern)}</code>
         <div class="text-muted text-sm">${p.mails} Spam-Mails von ${p.senders} Absendern · ${inbox}</div>
       </div>
-      <button class="btn btn-secondary btn-sm" data-action="accept-suggestion" data-val="${this.esc(p.pattern)}">Übernehmen</button>
+      <button class="btn btn-secondary btn-sm" data-action="accept-suggestion" data-kind="${kind}" data-val="${this.esc(p.pattern)}">Übernehmen</button>
     </div>`;
-            }).join('');
-            body = s.patterns.length ? rows : '<p class="text-muted text-sm">Keine Vorschläge.</p>';
+            };
+            body = s.patterns.length ? s.patterns.map(p => row('subjects', p)).join('') : '<p class="text-muted text-sm">Keine Vorschläge.</p>';
+            if ((s.names || []).length) {
+                body += `
+    <div class="form-group" style="margin-top:14px">
+      <label class="form-label">Absendernamen (kommen bei mehreren Adressen vor; wirken über die Absenderliste)</label>
+      ${s.names.map(p => row('senders', p)).join('')}
+    </div>`;
+            }
             if (s.redundant.length) {
                 const tags = s.redundant.map(a => `<span class="tag" data-action="remove-redundant" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Aus der Sperrliste entfernen">×</button></span>`).join('');
                 body += `
@@ -261,8 +268,8 @@ const App = {
         }
         return `
 <div class="card" id="suggestions-card" style="margin-top:16px">
-  <div class="card-title">💡 Vorschläge für Betreff-Muster</div>
-  <p class="text-muted text-sm">Aus dem Spam-Ordner: Wortfolgen im Betreff, die in mindestens 4 Mails von mindestens 3 Absendern vorkommen und keine Mail der INBOX treffen. Nichts wird automatisch übernommen.</p>
+  <div class="card-title">💡 Vorschläge für Betreff- und Namens-Muster</div>
+  <p class="text-muted text-sm">Aus dem Spam-Ordner: Wortfolgen und Klammer-Etiketten im Betreff, die in mindestens 4 Mails von mindestens 3 Absendern vorkommen und keine Mail der INBOX treffen. Nichts wird automatisch übernommen.</p>
   <button class="btn btn-secondary btn-sm" style="margin:8px 0" onclick="App.loadBlacklistSuggestions()">Vorschläge laden</button>
   ${body}
 </div>`;
@@ -273,16 +280,17 @@ const App = {
         this.renderBlacklist();
         const res = await this.apiGet('api/blacklist_suggestions.php');
         this.state.blSuggestions = res && res.ok
-            ? { patterns: res.patterns, redundant: res.redundant }
+            ? { patterns: res.patterns, names: res.names, redundant: res.redundant }
             : { error: res?.error || 'Vorschläge konnten nicht geladen werden.' };
         this.renderBlacklist();
     },
 
-    acceptSuggestion(pattern) {
+    acceptSuggestion(kind, pattern) {
         const bl = this.state.rules.blacklist;
-        if (!bl.subjects) bl.subjects = [];
-        if (!bl.subjects.includes(pattern)) bl.subjects.push(pattern);
-        this.state.blSuggestions.patterns = this.state.blSuggestions.patterns.filter(p => p.pattern !== pattern);
+        if (!bl[kind]) bl[kind] = [];
+        if (!bl[kind].includes(pattern)) bl[kind].push(pattern);
+        const list = kind === 'senders' ? 'names' : 'patterns';
+        this.state.blSuggestions[list] = this.state.blSuggestions[list].filter(p => p.pattern !== pattern);
         this.saveRules();
         this.renderBlacklist();
     },
@@ -1424,7 +1432,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             }
             case 'accept-suggestion':
-                App.acceptSuggestion(btn.dataset.val);
+                App.acceptSuggestion(btn.dataset.kind, btn.dataset.val);
                 break;
             case 'remove-redundant': {
                 const val = btn.closest('.tag')?.dataset.val;
