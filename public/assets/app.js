@@ -238,8 +238,7 @@ const App = {
             body = `<p class="text-muted text-sm">${this.esc(s.error)}</p>`;
         } else if (s) {
             const rows = s.patterns.map(p => {
-                const inbox = p.inbox_hits === null ? 'INBOX: nicht ermittelt'
-                    : (p.inbox_hits > 0 ? `⚠️ würde ${p.inbox_hits} Mail(s) in der INBOX treffen` : 'trifft keine Mail in der INBOX');
+                const inbox = p.inbox_hits === null ? '⚠️ INBOX nicht geprüft' : 'trifft keine Mail in der INBOX';
                 return `
     <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0">
@@ -249,9 +248,7 @@ const App = {
       <button class="btn btn-secondary btn-sm" data-action="accept-suggestion" data-val="${this.esc(p.pattern)}">Übernehmen</button>
     </div>`;
             }).join('');
-            body = s.patterns.length ? `${rows}
-    <p class="text-muted text-sm" style="margin-top:8px">Bei Treffern in der INBOX ⚠️ vor dem Übernehmen prüfen, ob das Muster zu allgemein ist.</p>`
-                : '<p class="text-muted text-sm">Keine Vorschläge.</p>';
+            body = s.patterns.length ? rows : '<p class="text-muted text-sm">Keine Vorschläge.</p>';
             if (s.redundant.length) {
                 const tags = s.redundant.map(a => `<span class="tag" data-action="remove-redundant" data-val="${this.esc(a)}">${this.esc(a)}<button class="tag-remove" title="Aus der Sperrliste entfernen">×</button></span>`).join('');
                 body += `
@@ -265,7 +262,7 @@ const App = {
         return `
 <div class="card" id="suggestions-card" style="margin-top:16px">
   <div class="card-title">💡 Vorschläge für Betreff-Muster</div>
-  <p class="text-muted text-sm">Aus dem Spam-Ordner: Betreffs, die in mindestens 3 Mails von mindestens 2 Absendern vorkommen. Nichts wird automatisch übernommen.</p>
+  <p class="text-muted text-sm">Aus dem Spam-Ordner: Wortfolgen im Betreff, die in mindestens 4 Mails von mindestens 3 Absendern vorkommen und keine Mail der INBOX treffen. Nichts wird automatisch übernommen.</p>
   <button class="btn btn-secondary btn-sm" style="margin:8px 0" onclick="App.loadBlacklistSuggestions()">Vorschläge laden</button>
   ${body}
 </div>`;
