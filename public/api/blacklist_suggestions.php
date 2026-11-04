@@ -34,26 +34,21 @@ $imap  = $conn['imap'];
 $count = @imap_num_msg($imap) ?: 0;
 $spamOverviews = $count > 0 ? (imap_fetch_overview($imap, max(1, $count - $maxScan + 1) . ':' . $count) ?: []) : [];
 
-$result = blacklist_suggest($spamOverviews, $rules['blacklist'] ?? []);
-// Bei abgeschnittenem Scan kennen wir nicht alle Mails eines Absenders: nichts zum Aufräumen vorschlagen.
-if ($count > $maxScan) $result['redundant'] = [];
-
-// Wie viele Mails der INBOX würde das Muster treffen? Null = nicht ermittelt.
-$hits = null;
-if ($result['patterns'] && @imap_reopen($imap, $conn['mbox'] . 'INBOX')) {
+// Muster, die Mails der INBOX treffen würden, werden nicht vorgeschlagen. Bei zu großer
+// INBOX (oder wenn sie sich nicht öffnen lässt) entfällt die Prüfung (inbox_hits = null).
+$inboxOverviews = null;
+if (@imap_reopen($imap, $conn['mbox'] . 'INBOX')) {
     $inboxCount = @imap_num_msg($imap) ?: 0;
     if ($inboxCount <= $maxScan) {
         $inboxOverviews = $inboxCount > 0 ? (imap_fetch_overview($imap, '1:' . $inboxCount) ?: []) : [];
-        $hits = blacklist_inbox_hits($inboxOverviews, array_column($result['patterns'], 'pattern'));
     }
 }
 imap_errors();
 imap_alerts();
 imap_close($imap);
 
-foreach ($result['patterns'] as &$p) {
-    $p['inbox_hits'] = $hits[$p['pattern']] ?? null;
-}
-unset($p);
+$result = blacklist_suggest($spamOverviews, $rules['blacklist'] ?? [], $inboxOverviews);
+// Bei abgeschnittenem Scan kennen wir nicht alle Mails eines Absenders: nichts zum Aufräumen vorschlagen.
+if ($count > $maxScan) $result['redundant'] = [];
 
 echo json_encode(['ok' => true, 'patterns' => $result['patterns'], 'redundant' => $result['redundant']]);
